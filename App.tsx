@@ -144,6 +144,10 @@ const App: React.FC = () => {
     setSalesReps(prev => [...prev, newRep]);
   };
 
+  const handleUpdateRep = (updatedRep: SalesRep) => {
+      setSalesReps(prev => prev.map(r => r.id === updatedRep.id ? updatedRep : r));
+  }
+
   const handleDeleteRep = (repId: string) => {
     setSalesReps(prev => prev.filter(r => r.id !== repId));
   };
@@ -170,7 +174,7 @@ const App: React.FC = () => {
 
     switch (currentView) {
       case 'dashboard':
-        return <Dashboard deals={deals} contacts={contacts} currentUser={currentUser} salesReps={salesReps} />;
+        return <Dashboard deals={deals} contacts={contacts} currentUser={currentUser} salesReps={salesReps} onExportToSheet={handleSaveData} />;
       case 'contacts':
         return (
           <ContactList 
@@ -189,11 +193,12 @@ const App: React.FC = () => {
           <Settings 
             salesReps={salesReps} 
             onAddRep={handleAddRep} 
+            onUpdateRep={handleUpdateRep}
             onDeleteRep={handleDeleteRep} 
           />
         );
       default:
-        return <Dashboard deals={deals} contacts={contacts} currentUser={currentUser} salesReps={salesReps} />;
+        return <Dashboard deals={deals} contacts={contacts} currentUser={currentUser} salesReps={salesReps} onExportToSheet={handleSaveData} />;
     }
   };
 
@@ -284,8 +289,6 @@ const App: React.FC = () => {
                 주간 리포트 발송
             </button>
         </div>
-        
-        {/* User Switcher Footer REMOVED as requested */}
       </aside>
 
       {/* Main Content */}

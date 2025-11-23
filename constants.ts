@@ -2,11 +2,11 @@
 import { Contact, Deal, DealStage, Activity, SalesRep, ContactType, AccountGrade, DealStatus } from './types';
 
 export const MOCK_SALES_REPS: SalesRep[] = [
-  { id: 's1', name: '홍길동', team: '영업 1팀', department: '영업본부', role: 'manager', email: 'hong@ieg.com' },
-  { id: 's2', name: '김영업', team: '영업 2팀', department: '영업본부', role: 'staff', email: 'kim@ieg.com' },
-  { id: 's3', name: '이수진', team: '영업 1팀', department: '영업본부', role: 'staff', email: 'lee@ieg.com' },
-  { id: 's4', name: '박이사', team: '임원실', department: '영업본부', role: 'director', email: 'park@ieg.com' },
-  { id: 's5', name: '최성실', team: '영업 2팀', department: '영업본부', role: 'staff', email: 'choi@ieg.com' },
+  { id: 's1', name: '홍길동', team: '영업 1팀', department: '영업본부', role: 'manager', email: 'hong@ieg.com', phone: '010-1234-5678' },
+  { id: 's2', name: '김영업', team: '영업 2팀', department: '영업본부', role: 'staff', email: 'kim@ieg.com', phone: '010-2345-6789' },
+  { id: 's3', name: '이수진', team: '영업 1팀', department: '영업본부', role: 'staff', email: 'lee@ieg.com', phone: '010-3456-7890' },
+  { id: 's4', name: '박이사', team: '임원실', department: '영업본부', role: 'director', email: 'park@ieg.com', phone: '010-4567-8901' },
+  { id: 's5', name: '최성실', team: '영업 2팀', department: '영업본부', role: 'staff', email: 'choi@ieg.com', phone: '010-5678-9012' },
 ];
 
 const now = new Date();

@@ -30,7 +30,7 @@ function getCRMData() {
   ]);
   
   const salesReps = getSheetData(ss, 'SalesReps', [
-    'id', 'name', 'team', 'department', 'role', 'email'
+    'id', 'name', 'team', 'department', 'role', 'email', 'phone', 'profilePicture'
   ]);
 
   return JSON.stringify({
@@ -57,7 +57,7 @@ function saveCRMData(type, jsonData) {
     headers = ['id', 'title', 'value', 'productAmount', 'goodsAmount', 'itemDetails', 'status', 'stage', 'contactId', 'expectedCloseDate', 'probability', 'owner', 'team', 'department'];
   } else if (type === 'salesReps') {
     sheetName = 'SalesReps';
-    headers = ['id', 'name', 'team', 'department', 'role', 'email'];
+    headers = ['id', 'name', 'team', 'department', 'role', 'email', 'phone', 'profilePicture'];
   }
 
   const data = JSON.parse(jsonData);

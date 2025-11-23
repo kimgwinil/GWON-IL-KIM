@@ -1,19 +1,24 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { SalesRep } from '../types';
-import { Plus, Trash2, User, Settings as SettingsIcon, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, User, Settings as SettingsIcon, RefreshCw, Camera, Edit } from 'lucide-react';
 import { resetToSampleData } from '../services/storageService';
 
 interface SettingsProps {
   salesReps: SalesRep[];
   onAddRep: (rep: SalesRep) => void;
+  onUpdateRep?: (rep: SalesRep) => void; // Added prop
   onDeleteRep: (id: string) => void;
 }
 
-const Settings: React.FC<SettingsProps> = ({ salesReps, onAddRep, onDeleteRep }) => {
+const Settings: React.FC<SettingsProps> = ({ salesReps, onAddRep, onUpdateRep, onDeleteRep }) => {
   const [newRep, setNewRep] = useState<Partial<SalesRep>>({
-    name: '', team: '영업 1팀', department: '영업본부', role: 'staff', email: ''
+    name: '', team: '영업 1팀', department: '영업본부', role: 'staff', email: '', phone: '', profilePicture: ''
   });
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const editFileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedRepId, setSelectedRepId] = useState<string | null>(null);
 
   const handleAdd = () => {
     if (!newRep.name || !newRep.email) {
@@ -26,10 +31,12 @@ const Settings: React.FC<SettingsProps> = ({ salesReps, onAddRep, onDeleteRep })
       team: newRep.team || '영업 1팀',
       department: newRep.department || '영업본부',
       role: newRep.role || 'staff',
-      email: newRep.email
+      email: newRep.email,
+      phone: newRep.phone,
+      profilePicture: newRep.profilePicture
     };
     onAddRep(rep);
-    setNewRep({ name: '', team: '영업 1팀', department: '영업본부', role: 'staff', email: '' });
+    setNewRep({ name: '', team: '영업 1팀', department: '영업본부', role: 'staff', email: '', phone: '', profilePicture: '' });
   };
 
   const handleResetData = async () => {
@@ -37,6 +44,30 @@ const Settings: React.FC<SettingsProps> = ({ salesReps, onAddRep, onDeleteRep })
           await resetToSampleData();
           window.location.reload();
       }
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean = false) => {
+    const file = e.target.files?.[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const base64String = reader.result as string;
+            if (isEdit && selectedRepId && onUpdateRep) {
+                const rep = salesReps.find(r => r.id === selectedRepId);
+                if (rep) {
+                    onUpdateRep({ ...rep, profilePicture: base64String });
+                }
+            } else {
+                setNewRep(prev => ({ ...prev, profilePicture: base64String }));
+            }
+        };
+        reader.readAsDataURL(file);
+    }
+  };
+
+  const triggerEditUpload = (id: string) => {
+      setSelectedRepId(id);
+      editFileInputRef.current?.click();
   }
 
   return (
@@ -67,12 +98,27 @@ const Settings: React.FC<SettingsProps> = ({ salesReps, onAddRep, onDeleteRep })
                     {salesReps.map(rep => (
                         <li key={rep.id} className="px-6 py-4 flex items-center justify-between hover:bg-slate-50 group">
                             <div className="flex items-center space-x-4">
-                                <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 font-bold">
-                                    {rep.name.charAt(0)}
+                                <div 
+                                    className="relative h-12 w-12 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 font-bold overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
+                                    onClick={() => triggerEditUpload(rep.id)}
+                                    title="사진 변경"
+                                >
+                                    {rep.profilePicture ? (
+                                        <img src={rep.profilePicture} alt={rep.name} className="h-full w-full object-cover" />
+                                    ) : (
+                                        <span>{rep.name.charAt(0)}</span>
+                                    )}
+                                    <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                                        <Camera size={16} className="text-white"/>
+                                    </div>
                                 </div>
                                 <div>
-                                    <p className="font-medium text-slate-900">{rep.name} <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded ml-2">{rep.role}</span></p>
+                                    <p className="font-medium text-slate-900 flex items-center">
+                                        {rep.name} 
+                                        <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded ml-2">{rep.role}</span>
+                                    </p>
                                     <p className="text-sm text-slate-500">{rep.team} | {rep.email}</p>
+                                    {rep.phone && <p className="text-xs text-slate-400 mt-0.5">{rep.phone}</p>}
                                 </div>
                             </div>
                             <button 
@@ -87,6 +133,7 @@ const Settings: React.FC<SettingsProps> = ({ salesReps, onAddRep, onDeleteRep })
                         <li className="px-6 py-8 text-center text-slate-400">등록된 직원이 없습니다.</li>
                     )}
                 </ul>
+                <input type="file" ref={editFileInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileChange(e, true)} />
             </div>
         </div>
 
@@ -97,8 +144,25 @@ const Settings: React.FC<SettingsProps> = ({ salesReps, onAddRep, onDeleteRep })
                     <Plus size={18} className="mr-2 text-indigo-600"/> 새 직원 등록
                 </h3>
                 <div className="space-y-4">
+                    <div className="flex justify-center mb-4">
+                        <div 
+                            className="h-20 w-20 rounded-full bg-slate-100 border-2 border-dashed border-slate-300 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-50 overflow-hidden relative"
+                            onClick={() => fileInputRef.current?.click()}
+                        >
+                             {newRep.profilePicture ? (
+                                <img src={newRep.profilePicture} alt="Preview" className="h-full w-full object-cover" />
+                            ) : (
+                                <>
+                                    <Camera size={24} className="text-slate-400 mb-1"/>
+                                    <span className="text-[10px] text-slate-400">사진 업로드</span>
+                                </>
+                            )}
+                        </div>
+                        <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileChange(e, false)} />
+                    </div>
+
                     <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">이름</label>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">이름 *</label>
                         <input 
                             type="text" 
                             className="w-full p-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
@@ -107,12 +171,22 @@ const Settings: React.FC<SettingsProps> = ({ salesReps, onAddRep, onDeleteRep })
                         />
                     </div>
                     <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">이메일</label>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">이메일 *</label>
                         <input 
                             type="email" 
                             className="w-full p-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                             value={newRep.email}
                             onChange={e => setNewRep({...newRep, email: e.target.value})}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">전화번호</label>
+                        <input 
+                            type="text" 
+                            className="w-full p-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                            value={newRep.phone || ''}
+                            onChange={e => setNewRep({...newRep, phone: e.target.value})}
+                            placeholder="010-0000-0000"
                         />
                     </div>
                     <div className="grid grid-cols-2 gap-3">

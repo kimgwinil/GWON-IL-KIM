@@ -72,6 +72,8 @@ export interface SalesRep {
   department: string;
   role: 'staff' | 'manager' | 'director';
   email: string;
+  phone?: string;
+  profilePicture?: string; // Base64 string
 }
 
 export type ViewState = 'dashboard' | 'contacts' | 'pipeline' | 'settings';

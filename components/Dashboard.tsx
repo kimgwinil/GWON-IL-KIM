@@ -2,13 +2,14 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Deal, DealStage, Contact, ScopeType, TimePeriod, SalesRep } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
-import { Briefcase, Users, TrendingUp, Download, Calendar, User, Users as UsersIcon, Activity } from 'lucide-react';
+import { Briefcase, Users, TrendingUp, Download, Calendar, User, Users as UsersIcon, Activity, FileSpreadsheet, Printer } from 'lucide-react';
 
 interface DashboardProps {
   deals: Deal[];
   contacts: Contact[];
   currentUser: { name: string; team: string; department: string };
   salesReps: SalesRep[]; // List of reps for the dropdown
+  onExportToSheet?: () => void;
 }
 
 // Custom Won Icon Component (Korean Won Symbol-ish)
@@ -34,7 +35,7 @@ const WonIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-const Dashboard: React.FC<DashboardProps> = ({ deals, contacts, currentUser, salesReps }) => {
+const Dashboard: React.FC<DashboardProps> = ({ deals, contacts, currentUser, salesReps, onExportToSheet }) => {
   const [scope, setScope] = useState<ScopeType>('individual');
   const [timePeriod, setTimePeriod] = useState<TimePeriod>('year');
   
@@ -42,6 +43,9 @@ const Dashboard: React.FC<DashboardProps> = ({ deals, contacts, currentUser, sal
   const [selectedUser, setSelectedUser] = useState<string>(currentUser.name);
   // Selected team for "Team" scope filtering
   const [selectedTeam, setSelectedTeam] = useState<string>(currentUser.team);
+  
+  // Export Menu State
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   // Get unique teams from salesReps dynamically
   const teams = useMemo(() => {
@@ -188,15 +192,15 @@ const Dashboard: React.FC<DashboardProps> = ({ deals, contacts, currentUser, sal
       return `₩${Math.round(value / 1000000).toLocaleString()}백만`;
   }
 
-  const handleExport = () => {
-    const dataStr = JSON.stringify({ deals: filteredDeals, contacts: scopedContacts }, null, 2);
-    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-    const exportFileDefaultName = `ieg_crm_export_${timePeriod}_${scope}.json`;
-    const linkElement = document.createElement('a');
-    linkElement.setAttribute('href', dataUri);
-    linkElement.setAttribute('download', exportFileDefaultName);
-    linkElement.click();
-  };
+  const handlePrintPDF = () => {
+      setShowExportMenu(false);
+      window.print();
+  }
+
+  const handleGoogleSheetExport = () => {
+      setShowExportMenu(false);
+      if (onExportToSheet) onExportToSheet();
+  }
 
   const currentScopeLabel = () => {
       if (scope === 'individual') return selectedUser;
@@ -241,8 +245,34 @@ const Dashboard: React.FC<DashboardProps> = ({ deals, contacts, currentUser, sal
   };
 
   return (
-    <div className="space-y-6 animate-fade-in pb-10">
-      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+    <div className="space-y-6 animate-fade-in pb-10 dashboard-container">
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          .dashboard-container, .dashboard-container * {
+            visibility: visible;
+          }
+          .dashboard-container {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            background: white;
+          }
+          aside, header, .no-print {
+            display: none !important;
+          }
+          .shadow-sm, .shadow-lg {
+            box-shadow: none !important;
+          }
+        }
+      `}</style>
+
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 no-print">
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
             <h2 className="text-2xl font-bold text-slate-800">영업 대시보드</h2>
             <div className="flex items-center bg-white rounded-md border border-slate-200 p-0.5 shadow-sm">
@@ -298,9 +328,36 @@ const Dashboard: React.FC<DashboardProps> = ({ deals, contacts, currentUser, sal
                 </div>
             )}
 
-            <button onClick={handleExport} className="flex items-center px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 text-sm font-medium transition-colors shadow-sm">
-                <Download size={16} className="mr-2" /> 내보내기
-            </button>
+            <div className="relative">
+                <button 
+                    onClick={() => setShowExportMenu(!showExportMenu)} 
+                    className="flex items-center px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 text-sm font-medium transition-colors shadow-sm"
+                >
+                    <Download size={16} className="mr-2" /> 내보내기
+                </button>
+                
+                {showExportMenu && (
+                    <>
+                        <div className="fixed inset-0 z-10" onClick={() => setShowExportMenu(false)}></div>
+                        <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-slate-100 z-20 py-1 animate-fade-in">
+                            <button 
+                                onClick={handleGoogleSheetExport}
+                                className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center"
+                            >
+                                <FileSpreadsheet size={16} className="mr-2 text-emerald-600"/>
+                                Google Sheet로 내보내기
+                            </button>
+                            <button 
+                                onClick={handlePrintPDF}
+                                className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center"
+                            >
+                                <Printer size={16} className="mr-2 text-slate-500"/>
+                                PDF로 내보내기 (인쇄)
+                            </button>
+                        </div>
+                    </>
+                )}
+            </div>
         </div>
       </div>
       
@@ -388,7 +445,11 @@ const Dashboard: React.FC<DashboardProps> = ({ deals, contacts, currentUser, sal
             </h3>
             <div className="h-80 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthlyData} margin={{ top: 20, right: 30, left: 50, bottom: 5 }}>
+                <BarChart 
+                    data={monthlyData} 
+                    margin={{ top: 20, right: 30, left: 40, bottom: 5 }}
+                    barCategoryGap="10%"
+                >
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                   <XAxis 
                     dataKey="name" 
@@ -408,10 +469,10 @@ const Dashboard: React.FC<DashboardProps> = ({ deals, contacts, currentUser, sal
                     cursor={{fill: '#f8fafc', opacity: 0.8}}
                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                   />
-                  <Bar dataKey="매출" stackId="a" fill={STACK_COLORS['매출']} radius={[0, 0, 0, 0]} maxBarSize={50} />
-                  <Bar dataKey="확정" stackId="a" fill={STACK_COLORS['확정']} radius={[0, 0, 0, 0]} maxBarSize={50} />
-                  <Bar dataKey="예정" stackId="a" fill={STACK_COLORS['예정']} radius={[0, 0, 0, 0]} maxBarSize={50} />
-                  <Bar dataKey="미정" stackId="a" fill={STACK_COLORS['미정']} radius={[4, 4, 0, 0]} maxBarSize={50} />
+                  <Bar dataKey="매출" stackId="a" fill={STACK_COLORS['매출']} radius={[0, 0, 0, 0]} maxBarSize={100} />
+                  <Bar dataKey="확정" stackId="a" fill={STACK_COLORS['확정']} radius={[0, 0, 0, 0]} maxBarSize={100} />
+                  <Bar dataKey="예정" stackId="a" fill={STACK_COLORS['예정']} radius={[0, 0, 0, 0]} maxBarSize={100} />
+                  <Bar dataKey="미정" stackId="a" fill={STACK_COLORS['미정']} radius={[4, 4, 0, 0]} maxBarSize={100} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -432,8 +493,8 @@ const Dashboard: React.FC<DashboardProps> = ({ deals, contacts, currentUser, sal
                                 data={gradeData}
                                 cx="50%"
                                 cy="50%"
-                                innerRadius={50} // Reduced for thickness
-                                outerRadius={115} // Increased for size
+                                innerRadius={50} // Thick donut
+                                outerRadius={115} // Larger size
                                 paddingAngle={2}
                                 dataKey="value"
                                 label={renderOutsideLabel} 
