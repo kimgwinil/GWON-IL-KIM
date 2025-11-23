@@ -204,25 +204,24 @@ const Dashboard: React.FC<DashboardProps> = ({ deals, contacts, currentUser, sal
       return '전체';
   }
 
-  // 1. Outside Label: Amount and Percentage
+  // 1. Outside Label: Amount Only (Bigger)
   const renderOutsideLabel = (props: any) => {
     const { cx, cy, midAngle, innerRadius, outerRadius, value } = props;
     const RADIAN = Math.PI / 180;
+    // Push label out slightly less to keep in box
     const radius = outerRadius + 20; 
     const x = cx + radius * Math.cos(-midAngle * RADIAN);
     const y = cy + radius * Math.sin(-midAngle * RADIAN);
     const textAnchor = x > cx ? 'start' : 'end';
     
-    const percent = totalGradeAmount > 0 ? ((value / totalGradeAmount) * 100).toFixed(1) : 0;
-
     return (
-      <text x={x} y={y} fill="#475569" textAnchor={textAnchor} dominantBaseline="central" fontSize={11} fontWeight={600}>
-        {`${formatMillionsKorean(value)} (${percent}%)`}
+      <text x={x} y={y} fill="#334155" textAnchor={textAnchor} dominantBaseline="central" fontSize={13} fontWeight={700}>
+        {formatMillionsKorean(value)}
       </text>
     );
   };
 
-  // 2. Inside Label: Grade Name
+  // 2. Inside Label: Grade + Percentage
   const renderInsideLabel = (props: any) => {
     const { cx, cy, midAngle, innerRadius, outerRadius, percent, name } = props;
     const RADIAN = Math.PI / 180;
@@ -232,11 +231,11 @@ const Dashboard: React.FC<DashboardProps> = ({ deals, contacts, currentUser, sal
     const y = cy + radius * Math.sin(-midAngle * RADIAN);
 
     // Hide if slice is too small
-    if (percent < 0.03) return null;
+    if (percent < 0.04) return null;
 
     return (
-        <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize={14} fontWeight="bold">
-            {name}
+        <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight="bold" style={{ textShadow: '0px 0px 3px rgba(0,0,0,0.5)' }}>
+            {`${name} (${(percent * 100).toFixed(1)}%)`}
         </text>
     );
   };
@@ -427,14 +426,14 @@ const Dashboard: React.FC<DashboardProps> = ({ deals, contacts, currentUser, sal
               <div className="h-80 w-full flex items-center justify-center">
                   {gradeData.length > 0 && gradeData.some(d => d.value > 0) ? (
                     <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
+                        <PieChart margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
                             {/* Main Pie (Visible Ring with Outside Label) */}
                             <Pie
                                 data={gradeData}
                                 cx="50%"
                                 cy="50%"
-                                innerRadius={50}
-                                outerRadius={105}
+                                innerRadius={50} // Reduced for thickness
+                                outerRadius={115} // Increased for size
                                 paddingAngle={2}
                                 dataKey="value"
                                 label={renderOutsideLabel} 
@@ -450,7 +449,7 @@ const Dashboard: React.FC<DashboardProps> = ({ deals, contacts, currentUser, sal
                                 cx="50%"
                                 cy="50%"
                                 innerRadius={50}
-                                outerRadius={105}
+                                outerRadius={115}
                                 dataKey="value"
                                 label={renderInsideLabel}
                                 labelLine={false}
