@@ -1,8 +1,8 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Deal, DealStage, Contact, ScopeType, TimePeriod, SalesRep } from '../types';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts';
-import { Briefcase, Users, TrendingUp, Download, Calendar, User, Users as UsersIcon, Activity, FileSpreadsheet, Printer } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend, Line, ComposedChart } from 'recharts';
+import { Briefcase, Users, TrendingUp, Download, Calendar, User, Users as UsersIcon, FileSpreadsheet, Printer } from 'lucide-react';
 
 interface DashboardProps {
   deals: Deal[];
@@ -137,29 +137,52 @@ const Dashboard: React.FC<DashboardProps> = ({ deals, contacts, currentUser, sal
 
   // 1. Monthly Stacked Bar Data (Jan-Dec) - Always show 12 months
   const monthlyData = useMemo(() => {
-      // Create skeleton for 12 months
-      const data = Array.from({length: 12}, (_, i) => ({
-          name: `${i + 1}월`,
-          매출: 0, 
-          확정: 0, 
-          예정: 0, 
-          미정: 0 
-      }));
+      // Seasonal Weights (Low start, Dip in Summer, Peak in Q4)
+      const SEASONALITY_WEIGHTS = [0.05, 0.05, 0.08, 0.08, 0.09, 0.09, 0.07, 0.06, 0.10, 0.10, 0.11, 0.12];
+      const totalAnnualTarget = scopedContacts.reduce((acc, c) => acc + (c.targetAmount || 0), 0);
 
-      // Use scoped deals (all year) to populate the monthly chart
-      scopedDeals.forEach(deal => {
-          const date = new Date(deal.expectedCloseDate);
-          // Only consider current year for the chart regardless of period filter (to show trend)
-          if (date.getFullYear() === new Date().getFullYear()) {
-              const monthIdx = date.getMonth(); // 0-11
-              const status = deal.status; 
-              if (data[monthIdx] && data[monthIdx][status] !== undefined) {
-                  data[monthIdx][status] += deal.value;
+      if (timePeriod === 'quarter') {
+          // Aggregate for Quarters
+          const data = [
+              { name: '1분기', 매출:0, 확정:0, 예정:0, 미정:0, 목표: 0 },
+              { name: '2분기', 매출:0, 확정:0, 예정:0, 미정:0, 목표: 0 },
+              { name: '3분기', 매출:0, 확정:0, 예정:0, 미정:0, 목표: 0 },
+              { name: '4분기', 매출:0, 확정:0, 예정:0, 미정:0, 목표: 0 },
+          ];
+          // Q1 Target (Jan+Feb+Mar)
+          data[0].목표 = Math.round(totalAnnualTarget * (SEASONALITY_WEIGHTS[0]+SEASONALITY_WEIGHTS[1]+SEASONALITY_WEIGHTS[2]));
+          data[1].목표 = Math.round(totalAnnualTarget * (SEASONALITY_WEIGHTS[3]+SEASONALITY_WEIGHTS[4]+SEASONALITY_WEIGHTS[5]));
+          data[2].목표 = Math.round(totalAnnualTarget * (SEASONALITY_WEIGHTS[6]+SEASONALITY_WEIGHTS[7]+SEASONALITY_WEIGHTS[8]));
+          data[3].목표 = Math.round(totalAnnualTarget * (SEASONALITY_WEIGHTS[9]+SEASONALITY_WEIGHTS[10]+SEASONALITY_WEIGHTS[11]));
+
+          scopedDeals.forEach(d => {
+              const date = new Date(d.expectedCloseDate);
+              if(date.getFullYear() === new Date().getFullYear()) {
+                  const q = Math.floor(date.getMonth()/3);
+                  data[q][d.status] += d.value;
               }
-          }
-      });
-      return data;
-  }, [scopedDeals]);
+          });
+          return data;
+      } else {
+          // Monthly view (Show 12 months)
+          const data = Array.from({length:12}, (_, i) => ({
+              name: `${i+1}월`, 
+              매출:0, 
+              확정:0, 
+              예정:0, 
+              미정:0,
+              목표: Math.round(totalAnnualTarget * SEASONALITY_WEIGHTS[i]) 
+          }));
+          
+          scopedDeals.forEach(d => {
+              const date = new Date(d.expectedCloseDate);
+              if(date.getFullYear() === new Date().getFullYear()) {
+                  data[date.getMonth()][d.status] += d.value;
+              }
+          });
+          return data;
+      }
+  }, [scopedDeals, scopedContacts, timePeriod]);
 
   // 2. Pie Chart Data (Grade) - Based on TARGET AMOUNT sum
   const gradeData = useMemo(() => {
@@ -191,6 +214,13 @@ const Dashboard: React.FC<DashboardProps> = ({ deals, contacts, currentUser, sal
   const formatMillionsKorean = (value: number) => {
       return `₩${Math.round(value / 1000000).toLocaleString()}백만`;
   }
+
+  const getDynamicFontSize = (val: number) => {
+      const str = formatCurrency(val);
+      if (str.length > 15) return "text-xl";
+      if (str.length > 11) return "text-2xl";
+      return "text-3xl"; 
+  };
 
   const handlePrintPDF = () => {
       setShowExportMenu(false);
@@ -272,24 +302,25 @@ const Dashboard: React.FC<DashboardProps> = ({ deals, contacts, currentUser, sal
         }
       `}</style>
 
+      {/* Header Section with Fix for Alignment */}
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 no-print">
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
             <h2 className="text-2xl font-bold text-slate-800">영업 대시보드</h2>
-            <div className="flex items-center bg-white rounded-md border border-slate-200 p-0.5 shadow-sm">
-                <button onClick={() => setTimePeriod('month')} className={`px-3 py-1.5 text-xs font-medium rounded-sm transition-colors ${timePeriod === 'month' ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>월별</button>
-                <button onClick={() => setTimePeriod('quarter')} className={`px-3 py-1.5 text-xs font-medium rounded-sm transition-colors ${timePeriod === 'quarter' ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>분기별</button>
-                <button onClick={() => setTimePeriod('year')} className={`px-3 py-1.5 text-xs font-medium rounded-sm transition-colors ${timePeriod === 'year' ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>누계</button>
+            <div className="flex items-center bg-white rounded-md border border-slate-200 p-0.5 shadow-sm h-10">
+                <button onClick={() => setTimePeriod('month')} className={`h-full px-3 text-xs font-medium rounded-sm transition-colors flex items-center ${timePeriod === 'month' ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>월별</button>
+                <button onClick={() => setTimePeriod('quarter')} className={`h-full px-3 text-xs font-medium rounded-sm transition-colors flex items-center ${timePeriod === 'quarter' ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>분기별</button>
+                <button onClick={() => setTimePeriod('year')} className={`h-full px-3 text-xs font-medium rounded-sm transition-colors flex items-center ${timePeriod === 'year' ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>누계</button>
             </div>
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
             {/* Scope Selection Buttons */}
-            <div className="relative inline-flex bg-white rounded-lg border border-slate-200 p-1 shadow-sm">
+            <div className="relative inline-flex bg-white rounded-lg border border-slate-200 p-1 shadow-sm h-10 items-center">
                 {(['individual', 'team', 'all'] as ScopeType[]).map(s => (
                      <button 
                         key={s}
                         onClick={() => setScope(s)}
-                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${scope === s ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:text-slate-900'}`}
+                        className={`px-3 h-full text-sm font-medium rounded-md transition-colors flex items-center ${scope === s ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:text-slate-900'}`}
                     >
                         {s === 'individual' ? '개인별' : s === 'team' ? '팀별' : '전체'}
                     </button>
@@ -298,11 +329,11 @@ const Dashboard: React.FC<DashboardProps> = ({ deals, contacts, currentUser, sal
 
             {/* Individual User Selector */}
             {scope === 'individual' && (
-                <div className="relative min-w-[140px]">
+                <div className="relative min-w-[140px] h-10">
                     <select 
                         value={selectedUser} 
                         onChange={(e) => setSelectedUser(e.target.value)}
-                        className="w-full pl-3 pr-8 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm appearance-none cursor-pointer hover:bg-slate-50"
+                        className="w-full h-full pl-3 pr-8 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm appearance-none cursor-pointer hover:bg-slate-50"
                     >
                         {salesReps.map(rep => (
                             <option key={rep.id} value={rep.name}>{rep.name}</option>
@@ -314,11 +345,11 @@ const Dashboard: React.FC<DashboardProps> = ({ deals, contacts, currentUser, sal
 
             {/* Team Selector */}
             {scope === 'team' && (
-                <div className="relative min-w-[140px]">
+                <div className="relative min-w-[140px] h-10">
                     <select 
                         value={selectedTeam} 
                         onChange={(e) => setSelectedTeam(e.target.value)}
-                        className="w-full pl-3 pr-8 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm appearance-none cursor-pointer hover:bg-slate-50"
+                        className="w-full h-full pl-3 pr-8 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm appearance-none cursor-pointer hover:bg-slate-50"
                     >
                         {teams.map(teamName => (
                             <option key={teamName} value={teamName}>{teamName}</option>
@@ -328,10 +359,10 @@ const Dashboard: React.FC<DashboardProps> = ({ deals, contacts, currentUser, sal
                 </div>
             )}
 
-            <div className="relative">
+            <div className="relative h-10">
                 <button 
                     onClick={() => setShowExportMenu(!showExportMenu)} 
-                    className="flex items-center px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 text-sm font-medium transition-colors shadow-sm"
+                    className="flex items-center px-3 h-full bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 text-sm font-medium transition-colors shadow-sm"
                 >
                     <Download size={16} className="mr-2" /> 내보내기
                 </button>
@@ -361,10 +392,10 @@ const Dashboard: React.FC<DashboardProps> = ({ deals, contacts, currentUser, sal
         </div>
       </div>
       
-      {/* KPI Cards - Compact Height (min-h-[105px]) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Target Card */}
-        <div className="md:col-span-2 lg:col-span-5 bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4 relative overflow-hidden">
+        <div className="col-span-1 md:col-span-2 lg:col-span-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-center gap-4 relative overflow-hidden">
             <div className="w-full md:w-auto z-10">
                 <p className="text-sm font-bold text-slate-500 flex items-center gap-2 mb-1">
                     총 목표 금액 ({timePeriod === 'month' ? '월간' : timePeriod === 'quarter' ? '분기' : '연간'})
@@ -374,12 +405,12 @@ const Dashboard: React.FC<DashboardProps> = ({ deals, contacts, currentUser, sal
                         {currentScopeLabel()}
                     </span>
                 </p>
-                <p className="text-3xl font-extrabold text-slate-900 tracking-tight">{formatCurrency(targetAmount)}</p>
+                <p className={`${getDynamicFontSize(targetAmount)} font-extrabold text-slate-900 tracking-tight`}>{formatCurrency(targetAmount)}</p>
             </div>
              <div className="text-right flex items-center gap-6 w-full md:w-auto justify-between md:justify-end z-10">
                  <div>
                      <p className="text-sm text-slate-500 font-semibold">달성률</p>
-                     <p className={`text-3xl font-bold ${targetAmount > 0 && (performanceAmount / targetAmount) >= 1 ? 'text-emerald-600' : 'text-indigo-600'}`}>
+                     <p className={`text-4xl font-bold ${targetAmount > 0 && (performanceAmount / targetAmount) >= 1 ? 'text-emerald-600' : 'text-indigo-600'}`}>
                         {targetAmount > 0 ? ((performanceAmount / targetAmount) * 100).toFixed(1) : 0}%
                      </p>
                  </div>
@@ -393,41 +424,41 @@ const Dashboard: React.FC<DashboardProps> = ({ deals, contacts, currentUser, sal
             </div>
         </div>
 
-        {/* Metric Cards - Reduced height */}
-        <div className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-l-emerald-500 border-y border-r border-slate-100 flex flex-col justify-between min-h-[105px] relative overflow-hidden group">
+        {/* Metric Cards - Evenly Distributed Row */}
+        <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-l-emerald-500 border-y border-r border-slate-100 flex flex-col justify-between min-h-[120px] relative overflow-hidden group col-span-1">
             <div className="z-10">
-                <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">매출 실적 (완료)</p>
-                <p className="text-3xl font-extrabold text-slate-800 mt-2">{formatCurrency(performanceAmount)}</p>
+                <p className="text-base font-bold text-slate-500 uppercase tracking-wide">매출 실적 (완료)</p>
+                <p className={`${getDynamicFontSize(performanceAmount)} font-extrabold text-slate-800 mt-2`}>{formatCurrency(performanceAmount)}</p>
             </div>
             <div className="absolute -bottom-4 -right-4 text-emerald-50 opacity-50 group-hover:opacity-100 group-hover:scale-110 transition-all duration-300 transform rotate-12 pointer-events-none">
                 <WonIcon className="w-20 h-20" />
             </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-l-blue-500 border-y border-r border-slate-100 flex flex-col justify-between min-h-[105px] relative overflow-hidden group">
+        <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-l-blue-500 border-y border-r border-slate-100 flex flex-col justify-between min-h-[120px] relative overflow-hidden group col-span-1">
             <div className="z-10">
-                <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">매출 확정</p>
-                <p className="text-3xl font-extrabold text-slate-800 mt-2">{formatCurrency(confirmedAmount)}</p>
+                <p className="text-base font-bold text-slate-500 uppercase tracking-wide">매출 확정</p>
+                <p className={`${getDynamicFontSize(confirmedAmount)} font-extrabold text-slate-800 mt-2`}>{formatCurrency(confirmedAmount)}</p>
             </div>
             <div className="absolute -bottom-4 -right-4 text-blue-50 opacity-50 group-hover:opacity-100 group-hover:scale-110 transition-all duration-300 transform rotate-12 pointer-events-none">
                 <Briefcase size={80} />
             </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-l-amber-400 border-y border-r border-slate-100 flex flex-col justify-between min-h-[105px] relative overflow-hidden group">
+        <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-l-amber-400 border-y border-r border-slate-100 flex flex-col justify-between min-h-[120px] relative overflow-hidden group col-span-1">
              <div className="z-10">
-                <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">매출 예정</p>
-                <p className="text-3xl font-extrabold text-slate-800 mt-2">{formatCurrency(expectedAmount)}</p>
+                <p className="text-base font-bold text-slate-500 uppercase tracking-wide">매출 예정</p>
+                <p className={`${getDynamicFontSize(expectedAmount)} font-extrabold text-slate-800 mt-2`}>{formatCurrency(expectedAmount)}</p>
             </div>
             <div className="absolute -bottom-4 -right-4 text-amber-50 opacity-50 group-hover:opacity-100 group-hover:scale-110 transition-all duration-300 transform rotate-12 pointer-events-none">
                 <TrendingUp size={80} />
             </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-l-slate-400 border-y border-r border-slate-100 flex flex-col justify-between min-h-[105px] relative overflow-hidden group">
+        <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-l-slate-400 border-y border-r border-slate-100 flex flex-col justify-between min-h-[120px] relative overflow-hidden group col-span-1">
             <div className="z-10">
-                <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">매출 미정</p>
-                <p className="text-3xl font-extrabold text-slate-800 mt-2">{formatCurrency(undecidedAmount)}</p>
+                <p className="text-base font-bold text-slate-500 uppercase tracking-wide">매출 미정</p>
+                <p className={`${getDynamicFontSize(undecidedAmount)} font-extrabold text-slate-800 mt-2`}>{formatCurrency(undecidedAmount)}</p>
             </div>
              <div className="absolute -bottom-4 -right-4 text-slate-100 opacity-50 group-hover:opacity-100 group-hover:scale-110 transition-all duration-300 transform rotate-12 pointer-events-none">
                 <Users size={80} />
@@ -441,11 +472,11 @@ const Dashboard: React.FC<DashboardProps> = ({ deals, contacts, currentUser, sal
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
             <h3 className="text-lg font-semibold text-slate-800 mb-6 flex items-center">
                 <Calendar size={20} className="mr-2 text-indigo-500"/>
-                월별 매출 현황 (누적)
+                {timePeriod === 'quarter' ? '분기별 매출 현황' : '월별 매출 현황 (누적)'}
             </h3>
             <div className="h-80 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart 
+                <ComposedChart 
                     data={monthlyData} 
                     margin={{ top: 20, right: 30, left: 40, bottom: 5 }}
                     barCategoryGap="10%"
@@ -469,12 +500,14 @@ const Dashboard: React.FC<DashboardProps> = ({ deals, contacts, currentUser, sal
                     cursor={{fill: '#f8fafc', opacity: 0.8}}
                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                   />
-                  <Legend iconType="circle" />
+                  <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} align="center"/>
                   <Bar dataKey="매출" stackId="a" fill={STACK_COLORS['매출']} radius={[0, 0, 0, 0]} maxBarSize={100} />
                   <Bar dataKey="확정" stackId="a" fill={STACK_COLORS['확정']} radius={[0, 0, 0, 0]} maxBarSize={100} />
                   <Bar dataKey="예정" stackId="a" fill={STACK_COLORS['예정']} radius={[0, 0, 0, 0]} maxBarSize={100} />
                   <Bar dataKey="미정" stackId="a" fill={STACK_COLORS['미정']} radius={[4, 4, 0, 0]} maxBarSize={100} />
-                </BarChart>
+                  {/* Seasonal Target Line */}
+                  <Line type="monotone" dataKey="목표" stroke="#f97316" strokeWidth={3} strokeDasharray="4 4" dot={{r: 4}} activeDot={{r: 6}} />
+                </ComposedChart>
               </ResponsiveContainer>
             </div>
           </div>
@@ -540,4 +573,3 @@ const Dashboard: React.FC<DashboardProps> = ({ deals, contacts, currentUser, sal
 };
 
 export default Dashboard;
-    

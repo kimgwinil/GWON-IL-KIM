@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Contact, AccountGrade, Deal, DealStatus, DealStage, ContactType } from '../types';
-import { Search, Plus, Trash2, X, ChevronDown, ChevronUp, MapPin, Edit } from 'lucide-react';
+import { Search, Plus, Trash2, X, ChevronDown, ChevronUp, MapPin, Edit, ArrowUpDown, Calendar } from 'lucide-react';
 
 interface ContactListProps {
   contacts: Contact[];
@@ -18,6 +18,9 @@ const ContactList: React.FC<ContactListProps> = ({ contacts, deals, onSelectCont
   const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
   const [showAddressPopup, setShowAddressPopup] = useState(false);
 
+  // Sorting
+  const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>(null);
+
   // Form State
   const [formContact, setFormContact] = useState<Partial<Contact>>({
       id: '', name: '', email: '', phone: '', company: '', address: '', role: '', department: '영업 1팀', targetAmount: 0, notes: [], grade: 'Unrated', type: 'Company', owner: '', team: ''
@@ -32,7 +35,7 @@ const ContactList: React.FC<ContactListProps> = ({ contacts, deals, onSelectCont
   useEffect(() => {
       setFormDeal(prev => ({
           ...prev,
-          value: (prev.productAmount || 0) + (prev.goodsAmount || 0)
+          value: (Number(prev.productAmount) || 0) + (Number(prev.goodsAmount) || 0)
       }));
   }, [formDeal.productAmount, formDeal.goodsAmount]);
 
@@ -63,11 +66,47 @@ const ContactList: React.FC<ContactListProps> = ({ contacts, deals, onSelectCont
       setIsModalOpen(true);
   }
 
-  const filteredContacts = contacts.filter(c => 
-    c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.company.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const handleSort = (key: string) => {
+      let direction: 'asc' | 'desc' = 'asc';
+      if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+          direction = 'desc';
+      }
+      setSortConfig({ key, direction });
+  };
+
+  const sortedContacts = useMemo(() => {
+      const filtered = contacts.filter(c => 
+          c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          c.company.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          c.email.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+
+      if (!sortConfig) return filtered;
+
+      return [...filtered].sort((a, b) => {
+          let aVal: any = a[sortConfig.key as keyof Contact];
+          let bVal: any = b[sortConfig.key as keyof Contact];
+
+          // Custom sorting for computed fields
+          if (sortConfig.key === 'wonTotal') {
+               const getWon = (cid: string) => deals.filter(d => d.contactId === cid && (d.status==='매출'||d.status==='확정')).reduce((sum, d) => sum + d.value, 0);
+               aVal = getWon(a.id);
+               bVal = getWon(b.id);
+          } else if (sortConfig.key === 'grade') {
+               const gradeOrder: Record<string, number> = { 'S': 5, 'A': 4, 'B': 3, 'C': 2, 'D': 1, 'Unrated': 0 };
+               aVal = gradeOrder[a.grade || 'Unrated'] || 0;
+               bVal = gradeOrder[b.grade || 'Unrated'] || 0;
+          }
+
+          // Handle null/undefined
+          if (aVal === undefined || aVal === null) aVal = '';
+          if (bVal === undefined || bVal === null) bVal = '';
+
+          if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+          if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+          return 0;
+      });
+  }, [contacts, deals, searchTerm, sortConfig]);
 
   const getGradeColor = (grade: AccountGrade) => {
       switch(grade) {
@@ -186,20 +225,26 @@ const ContactList: React.FC<ContactListProps> = ({ contacts, deals, onSelectCont
           <table className="w-full text-left border-collapse">
             <thead className="bg-slate-50 text-slate-500 text-sm font-semibold uppercase tracking-wider border-b border-slate-200">
               <tr>
-                <th className="px-4 py-4 w-56">거래처/유형/지역</th>
-                <th className="px-4 py-4 w-48">고객 정보</th>
-                <th className="px-4 py-4 min-w-[500px]">
+                <th className="px-4 py-4 w-56 cursor-pointer hover:bg-slate-100 transition-colors" onClick={()=>handleSort('company')}>
+                    <div className="flex items-center">거래처/유형/지역 <ArrowUpDown size={14} className="ml-1 text-slate-400"/></div>
+                </th>
+                <th className="px-4 py-4 w-48 cursor-pointer hover:bg-slate-100 transition-colors" onClick={()=>handleSort('name')}>
+                    <div className="flex items-center">고객 정보 <ArrowUpDown size={14} className="ml-1 text-slate-400"/></div>
+                </th>
+                <th className="px-4 py-4 min-w-[500px] cursor-pointer hover:bg-slate-100 transition-colors" onClick={()=>handleSort('wonTotal')}>
                     <div className="flex justify-between items-center">
-                        <span>매출 상세 현황 (단위: 원)</span>
+                        <div className="flex items-center">매출 상세 현황 (단위: 원) <ArrowUpDown size={14} className="ml-1 text-slate-400"/></div>
                         <span className="text-xs font-normal text-slate-400">제품 / 상품 / 소계</span>
                     </div>
                 </th>
-                <th className="px-4 py-4 w-24">AI 등급</th>
-                <th className="px-4 py-4 w-20">관리</th>
+                <th className="px-4 py-4 w-24 text-center cursor-pointer hover:bg-slate-100 transition-colors" onClick={()=>handleSort('grade')}>
+                    <div className="flex items-center justify-center">AI 등급 <ArrowUpDown size={14} className="ml-1 text-slate-400"/></div>
+                </th>
+                <th className="px-4 py-4 w-20 text-right">관리</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredContacts.map(contact => {
+              {sortedContacts.map(contact => {
                  const contactDeals = deals.filter(d => d.contactId === contact.id);
                  const wonDeals = contactDeals.filter(d => d.status === '매출' || d.stage === DealStage.CLOSED_WON);
                  const wonProduct = wonDeals.reduce((sum, d) => sum + (d.productAmount || 0), 0);
@@ -208,6 +253,17 @@ const ContactList: React.FC<ContactListProps> = ({ contacts, deals, onSelectCont
                  const confirmed = contactDeals.filter(d => d.status === '확정').reduce((sum, d) => sum + d.value, 0);
                  const expected = contactDeals.filter(d => d.status === '예정').reduce((sum, d) => sum + d.value, 0);
                  const undecided = contactDeals.filter(d => d.status === '미정').reduce((sum, d) => sum + d.value, 0);
+
+                 // Find next expected deal date or last closed date
+                 const futureDeals = contactDeals
+                    .filter(d => new Date(d.expectedCloseDate) >= new Date())
+                    .sort((a,b) => new Date(a.expectedCloseDate).getTime() - new Date(b.expectedCloseDate).getTime());
+                 const pastDeals = contactDeals
+                    .filter(d => new Date(d.expectedCloseDate) < new Date())
+                    .sort((a,b) => new Date(b.expectedCloseDate).getTime() - new Date(a.expectedCloseDate).getTime());
+                 
+                 const nextDealDate = futureDeals.length > 0 ? futureDeals[0].expectedCloseDate : (pastDeals.length > 0 ? pastDeals[0].expectedCloseDate : '-');
+                 const isFuture = futureDeals.length > 0;
 
                  return (
                 <tr 
@@ -262,6 +318,16 @@ const ContactList: React.FC<ContactListProps> = ({ contacts, deals, onSelectCont
                           <div className="p-2 flex items-center justify-end font-medium text-slate-600">
                               {formatCurrency(undecided)}
                           </div>
+                      </div>
+                      {/* Added Expected Revenue Date Row */}
+                      <div className="mt-1 flex items-center justify-end text-xs text-slate-500">
+                         <Calendar size={12} className={`mr-1 ${isFuture ? 'text-indigo-500' : 'text-slate-400'}`} />
+                         <span>
+                             {isFuture ? '예상 매출일: ' : '최근 매출일: '}
+                             <span className={`font-medium ${isFuture ? 'text-indigo-600' : 'text-slate-600'}`}>
+                                 {nextDealDate}
+                             </span>
+                         </span>
                       </div>
                   </td>
 
@@ -420,8 +486,13 @@ const ContactList: React.FC<ContactListProps> = ({ contacts, deals, onSelectCont
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">담당자(Sales Owner)</label>
-                                        <input type="text" className="w-full p-2 border rounded-lg" value={formDeal.owner} onChange={e => setFormDeal({...formDeal, owner: e.target.value})} />
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">예상 매출일</label>
+                                        <input 
+                                            type="date" 
+                                            className="w-full p-2 border rounded-lg" 
+                                            value={formDeal.expectedCloseDate} 
+                                            onChange={e => setFormDeal({...formDeal, expectedCloseDate: e.target.value})} 
+                                        />
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4 bg-white p-3 rounded border">
