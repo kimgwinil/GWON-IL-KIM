@@ -1,17 +1,18 @@
 
 import React, { useState, useRef } from 'react';
 import { SalesRep } from '../types';
-import { Plus, Trash2, User, Settings as SettingsIcon, RefreshCw, Camera, Edit } from 'lucide-react';
+import { Plus, Trash2, User, Settings as SettingsIcon, RefreshCw, Camera, Edit, UploadCloud } from 'lucide-react';
 import { resetToSampleData } from '../services/storageService';
 
 interface SettingsProps {
   salesReps: SalesRep[];
   onAddRep: (rep: SalesRep) => void;
-  onUpdateRep?: (rep: SalesRep) => void; // Added prop
+  onUpdateRep?: (rep: SalesRep) => void; 
   onDeleteRep: (id: string) => void;
+  onUploadSamples?: () => void; // New prop for uploading samples
 }
 
-const Settings: React.FC<SettingsProps> = ({ salesReps, onAddRep, onUpdateRep, onDeleteRep }) => {
+const Settings: React.FC<SettingsProps> = ({ salesReps, onAddRep, onUpdateRep, onDeleteRep, onUploadSamples }) => {
   const [newRep, setNewRep] = useState<Partial<SalesRep>>({
     name: '', team: '영업 1팀', department: '영업본부', role: 'staff', email: '', phone: '', profilePicture: ''
   });
@@ -43,6 +44,12 @@ const Settings: React.FC<SettingsProps> = ({ salesReps, onAddRep, onUpdateRep, o
       if(confirm("모든 데이터를 지우고 초기 샘플 데이터로 되돌리시겠습니까?")) {
           await resetToSampleData();
           window.location.reload();
+      }
+  }
+
+  const handleUploadSamplesToSheet = () => {
+      if (confirm("현재 화면의 샘플 데이터를 구글 시트에 업로드하시겠습니까?\n주의: 시트의 기존 데이터가 덮어씌워질 수 있습니다.")) {
+          if (onUploadSamples) onUploadSamples();
       }
   }
 
@@ -79,12 +86,20 @@ const Settings: React.FC<SettingsProps> = ({ salesReps, onAddRep, onUpdateRep, o
             </div>
             <h2 className="text-2xl font-bold text-slate-800">설정 (영업 직원 관리)</h2>
           </div>
-          <button 
-            onClick={handleResetData}
-            className="flex items-center px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors text-sm font-medium border border-red-100"
-          >
-              <RefreshCw size={16} className="mr-2"/> 샘플 데이터로 초기화
-          </button>
+          <div className="flex space-x-2">
+            <button 
+                onClick={handleUploadSamplesToSheet}
+                className="flex items-center px-4 py-2 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors text-sm font-medium border border-emerald-100"
+            >
+                <UploadCloud size={16} className="mr-2"/> 구글 시트에 샘플 업로드
+            </button>
+            <button 
+                onClick={handleResetData}
+                className="flex items-center px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors text-sm font-medium border border-red-100"
+            >
+                <RefreshCw size={16} className="mr-2"/> 샘플 데이터로 초기화
+            </button>
+          </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">

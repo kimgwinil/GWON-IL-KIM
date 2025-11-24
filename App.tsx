@@ -36,9 +36,10 @@ const App: React.FC = () => {
     const syncInterval = setInterval(() => {
         console.log("Auto-syncing data...");
         syncSheetData().then(data => {
-            setContacts(data.contacts);
-            setDeals(data.deals);
-            setSalesReps(data.salesReps);
+            // Only update if data exists to avoid wiping local work with empty sheet
+            if (data.contacts.length > 0) setContacts(data.contacts);
+            if (data.deals.length > 0) setDeals(data.deals);
+            if (data.salesReps.length > 0) setSalesReps(data.salesReps);
         }).catch(err => console.error("Auto-sync failed", err));
     }, 600000);
 
@@ -77,6 +78,20 @@ const App: React.FC = () => {
       setIsSaving(false);
     }
   };
+
+  const handleUploadSamples = async () => {
+      setIsSaving(true);
+      try {
+          // Force save the current state (which contains mock data) to the sheet
+          await saveDataToSheet(contacts, deals, salesReps);
+          alert("샘플 데이터가 구글 시트에 업로드되었습니다.");
+      } catch (error) {
+          console.error("Upload failed:", error);
+          alert("업로드 중 오류가 발생했습니다.");
+      } finally {
+          setIsSaving(false);
+      }
+  }
 
   const handleSyncSheet = async () => {
       // Check if running in typical Gas environment or local
@@ -194,7 +209,8 @@ const App: React.FC = () => {
             salesReps={salesReps} 
             onAddRep={handleAddRep} 
             onUpdateRep={handleUpdateRep}
-            onDeleteRep={handleDeleteRep} 
+            onDeleteRep={handleDeleteRep}
+            onUploadSamples={handleUploadSamples}
           />
         );
       default:

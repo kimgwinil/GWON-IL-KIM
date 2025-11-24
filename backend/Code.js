@@ -1,26 +1,36 @@
 
 /**
  * Google Apps Script Backend Code
- * 이 코드를 Google Apps Script 프로젝트의 Code.gs 파일에 복사하여 붙여넣으세요.
+ * 이 코드는 Code.gs 파일에 붙여넣으세요.
  */
 
 // 사용자가 지정한 스프레드시트 ID
 const SPREADSHEET_ID = '1fWeLcQvotKZGgxelAOvKt_UXyYvdoneYVBeVXFMLRKY';
 
 function doGet(e) {
-  return HtmlService.createTemplateFromFile('index')
-      .evaluate()
-      .setTitle('IEG CRM')
-      .addMetaTag('viewport', 'width=device-width, initial-scale=1')
-      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  try {
+    // index.html 파일을 찾아 웹앱으로 표시합니다.
+    return HtmlService.createTemplateFromFile('index')
+        .evaluate()
+        .setTitle('IEG CRM')
+        .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+        .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  } catch (e) {
+    // index.html 파일이 없을 경우 에러 메시지를 표시하는 안전장치입니다.
+    return HtmlService.createHtmlOutput(
+      `<div style="font-family: sans-serif; padding: 20px; text-align: center;">
+         <h2 style="color: #e11d48;">⚠️ 설치 오류</h2>
+         <p><b>index.html</b> 파일을 찾을 수 없습니다.</p>
+         <p>좌측 메뉴에서 <b>[+] > HTML</b>을 클릭하여 파일 이름을 <b>index</b>로 생성하고,</p>
+         <p>제공된 React 통합 코드를 모두 붙여넣으세요.</p>
+       </div>`
+    );
+  }
 }
 
-/**
- * 초기 데이터 로드
- */
 function getCRMData() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  // address column added
+  
   const contacts = getSheetData(ss, 'Contacts', [
     'id', 'name', 'email', 'phone', 'company', 'address', 'role', 'department', 'lastContacted', 'notes', 'grade', 'targetAmount', 'type', 'owner', 'team'
   ]);
@@ -40,9 +50,6 @@ function getCRMData() {
   });
 }
 
-/**
- * 데이터 저장 (개별 업데이트 또는 전체 저장)
- */
 function saveCRMData(type, jsonData) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   let sheetName = '';
@@ -50,7 +57,6 @@ function saveCRMData(type, jsonData) {
 
   if (type === 'contacts') {
     sheetName = 'Contacts';
-    // address, type, owner, team added
     headers = ['id', 'name', 'email', 'phone', 'company', 'address', 'role', 'department', 'lastContacted', 'notes', 'grade', 'targetAmount', 'type', 'owner', 'team'];
   } else if (type === 'deals') {
     sheetName = 'Deals';
@@ -65,29 +71,20 @@ function saveCRMData(type, jsonData) {
   return "Success";
 }
 
-/**
- * 주간 리포트 이메일 발송
- */
 function sendEmail(recipient, subject, body) {
   try {
     MailApp.sendEmail({
       to: recipient,
       subject: subject,
-      htmlBody: body.replace(/\n/g, '<br>') // Convert newlines to HTML breaks
+      htmlBody: body.replace(/\n/g, '<br>')
     });
     return "Success";
   } catch (e) {
-    Logger.log("Email Error: " + e.toString());
     throw new Error("이메일 발송 실패: " + e.toString());
   }
 }
 
-/**
- * 시트 데이터 전체 동기화 (Bulk Import 용)
- * 구글 시트에 사용자가 직접 입력한 데이터를 앱으로 가져올 때 사용
- */
 function syncSheetData() {
-  // 단순히 getCRMData를 재호출하여 최신 시트 상태를 반환
   return getCRMData();
 }
 
@@ -114,7 +111,6 @@ function getSheetData(ss, sheetName, headers) {
       if (header === 'notes' && typeof value === 'string' && value.startsWith('[')) {
         try { value = JSON.parse(value); } catch(e) { value = []; }
       }
-      // 날짜 객체 처리
       if (value instanceof Date) {
          value = Utilities.formatDate(value, ss.getSpreadsheetTimeZone(), "yyyy-MM-dd");
       }
@@ -131,12 +127,9 @@ function saveSheetData(ss, sheetName, headers, data) {
   }
   
   sheet.clear();
-  // 헤더가 없으면 추가
   if (sheet.getLastRow() === 0) {
       sheet.appendRow(headers);
   } else {
-      // 기존 데이터 삭제 (헤더 유지)
-      // sheet.deleteRows(2, sheet.getLastRow() - 1); // This can be slow for many rows
       sheet.getRange(2, 1, sheet.getMaxRows(), sheet.getMaxColumns()).clearContent();
   }
 
@@ -152,7 +145,6 @@ function saveSheetData(ss, sheetName, headers, data) {
     });
   });
 
-  // 대량 데이터 쓰기 최적화
   if (rows.length > 0) {
     sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
   }

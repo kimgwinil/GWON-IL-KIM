@@ -4,7 +4,7 @@ import { MOCK_CONTACTS, MOCK_DEALS, MOCK_SALES_REPS } from "../constants";
 
 // 로컬 개발 환경 여부 확인
 const isLocal = !window.google || !window.google.script;
-const STORAGE_KEY = 'ieg_crm_data_v11'; // Version bump to v11 to force fresh data load and remove "Unrated"
+const STORAGE_KEY = 'ieg_crm_data_v15'; // Version bump to v15
 
 export const loadInitialData = (): Promise<{ contacts: Contact[], deals: Deal[], salesReps: SalesRep[] }> => {
   return new Promise((resolve, reject) => {
@@ -24,21 +24,22 @@ export const loadInitialData = (): Promise<{ contacts: Contact[], deals: Deal[],
             resolve({ contacts: MOCK_CONTACTS, deals: MOCK_DEALS, salesReps: MOCK_SALES_REPS });
         }
       } else {
-        // First run or version change: Use fresh mocks
         console.log("New version detected, initializing with fresh mock data.");
-        // Save immediately to persist the fresh data
         localStorage.setItem(STORAGE_KEY, JSON.stringify({ contacts: MOCK_CONTACTS, deals: MOCK_DEALS, salesReps: MOCK_SALES_REPS }));
         resolve({ contacts: MOCK_CONTACTS, deals: MOCK_DEALS, salesReps: MOCK_SALES_REPS });
       }
       return;
     }
 
+    // Apps Script Environment
     window.google!.script.run
       .withSuccessHandler((response: string) => {
         try {
           const parsed = JSON.parse(response);
-          // If Sheet is empty, return Mocks
+          // If Sheet is empty (no contacts/deals), verify if salesReps exist.
+          // If completely empty, return Mocks so the user sees something.
           if ((!parsed.contacts || parsed.contacts.length === 0) && (!parsed.deals || parsed.deals.length === 0)) {
+               console.log("Sheet appears empty. Using mock data for display.");
                resolve({ contacts: MOCK_CONTACTS, deals: MOCK_DEALS, salesReps: MOCK_SALES_REPS });
           } else {
                resolve({
@@ -49,12 +50,14 @@ export const loadInitialData = (): Promise<{ contacts: Contact[], deals: Deal[],
           }
         } catch (e) {
           console.error("Failed to parse GAS response", e);
-          resolve({ contacts: [], deals: [], salesReps: [] });
+          // Fallback to mocks on error
+          resolve({ contacts: MOCK_CONTACTS, deals: MOCK_DEALS, salesReps: MOCK_SALES_REPS });
         }
       })
       .withFailureHandler((error: Error) => {
         console.error("GAS Error:", error);
-        reject(error);
+        // Fallback to mocks on error to keep app usable
+        resolve({ contacts: MOCK_CONTACTS, deals: MOCK_DEALS, salesReps: MOCK_SALES_REPS });
       })
       .getCRMData();
   });
@@ -90,8 +93,6 @@ export const sendReportEmail = (email: string, subject: string, body: string): P
     return new Promise((resolve, reject) => {
         if(isLocal) {
             console.log(`[Local Mock] Sending Email to ${email}`);
-            console.log(`Subject: ${subject}`);
-            console.log(`Body: ${body}`);
             resolve();
             return;
         }
