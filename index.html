@@ -1,763 +1,917 @@
-
 <!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>IEG CRM</title>
-    <!-- Tailwind CSS -->
+    
+    <!-- 1. Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- React & Libraries (Global Access via CDN) -->
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/recharts/umd/Recharts.js"></script>
+    <!-- 2. React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
     
-    <!-- Lucide Icons (React Version) -->
-    <script src="https://unpkg.com/lucide-react/dist/umd/lucide-react.js"></script>
+    <!-- 3. Prop-Types (Required for Recharts) -->
+    <script crossorigin src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
     
-    <!-- Babel for JSX -->
+    <!-- 4. Recharts (Stable UMD Version) -->
+    <script crossorigin src="https://unpkg.com/recharts@2.12.3/umd/Recharts.js"></script>
+    
+    <!-- 5. Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- Google GenAI SDK Import Map -->
+    <!-- Google GenAI SDK -->
     <script type="importmap">
 {
   "imports": {
-    "@google/genai": "https://esm.sh/@google/genai@0.1.0",
+    "@google/genai": "https://esm.run/@google/genai",
     "react": "https://aistudiocdn.com/react@^19.2.0",
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
     "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "recharts": "https://aistudiocdn.com/recharts@^3.4.1",
+    "recharts": "https://aistudiocdn.com/recharts@^3.5.0",
     "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0"
   }
 }
 </script>
-
+    
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
-        
-        /* Animation Classes */
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        
         .animate-fade-in { animation: fadeIn 0.5s ease-out; }
-        .animate-slide-up { animation: slideUp 0.4s ease-out; }
-        .animate-slide-in { animation: fadeIn 0.3s ease-out; }
-        
-        /* Print Styles for PDF Export */
-        @media print {
-          body * { visibility: hidden; }
-          .dashboard-container, .dashboard-container * { visibility: visible; }
-          .dashboard-container { 
-            position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 20px; background: white; 
-          }
-          aside, header, .no-print, button, .recharts-tooltip-wrapper { display: none !important; }
-          .shadow-sm, .shadow-lg { box-shadow: none !important; border: 1px solid #ddd; }
-        }
-        
-        /* Custom Scrollbar */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: #f1f5f9; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-
-        /* Recharts Override */
+        
+        /* Chart Fixes */
         .recharts-wrapper { width: 100% !important; }
+        .chart-fix { position: relative; width: 100%; height: 320px; min-height: 320px; }
+        
+        @media print {
+          body * { visibility: hidden; }
+          .dashboard-container, .dashboard-container * { visibility: visible; }
+          .dashboard-container { position: absolute; left: 0; top: 0; width: 100%; }
+          aside, header, .no-print { display: none !important; }
+        }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-900">
-    <div id="root"></div>
+    <div id="root">
+        <div style="height: 100vh; display: flex; align-items: center; justify-content: center; color: #4f46e5; flex-direction: column;">
+            <div style="font-weight: bold; font-size: 1.5rem; margin-bottom: 1rem;">IEG CRM</div>
+            <div class="mt-4 animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+        </div>
+    </div>
 
+    <!-- MAIN SCRIPT -->
     <script type="text/babel" data-type="module">
         import { GoogleGenAI } from "@google/genai";
 
         // ==========================================
-        // 1. GLOBAL SETUP & CONSTANTS
+        // 0. INTERNAL ICON SYSTEM (NO EXTERNAL LIBS)
         // ==========================================
-        const { useState, useEffect, useMemo, useRef } = React;
-        const { createRoot } = ReactDOM;
-        const { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } = Recharts;
-        
-        // Destructure Icons
-        const { 
-            LayoutDashboard, Users, Kanban, Menu, X, Sparkles, Mail, Save, RefreshCw, 
-            Settings: SettingsIcon, FileSpreadsheet, ChevronUp, ChevronDown, Check, 
-            Activity, Search, Plus, Trash2, MapPin, Edit, ArrowLeft, Phone, Building, 
-            Edit3, Send, Target, Calendar, Briefcase, TrendingUp, Printer, Download, 
-            UploadCloud, Camera, User, AlertCircle 
-        } = window.lucideReact; // Access Lucide from global window object
-
-        const API_KEY = 'AIzaSyA6fwFuyNGy3Kh6hojdsVZD640tK_QlJNw'; 
-        const STORAGE_KEY = 'ieg_crm_data_v17'; 
-
-        // Enums & Types Simulation
-        const DealStage = {
-            LEAD: '가망 고객 (Lead)',
-            QUALIFIED: '적격 단계 (Qualified)',
-            PROPOSAL: '제안 단계 (Proposal)',
-            NEGOTIATION: '협상 단계 (Negotiation)',
-            CLOSED_WON: '계약 성사 (Closed Won)',
-            CLOSED_LOST: '계약 실패 (Closed Lost)'
+        const IconPaths = {
+            LayoutDashboard: <path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z" />,
+            Users: <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm13 14v-2a4 4 0 0 0-3-3.87M23 7a4 4 0 1 0-4-3.32" />,
+            Kanban: <path d="M6 5v14M12 5v14M18 5v14" />,
+            Settings: <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z" />,
+            Save: <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2zM17 21v-8H7v8M7 3v5h8V3" />,
+            RefreshCw: <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />,
+            Mail: <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zM22 6l-10 7L2 6" />,
+            Phone: <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />,
+            Building: <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M6 6h.01M6 10h.01M6 14h.01M6 18h.01M10 6h.01M10 10h.01M10 14h.01M10 18h.01M14 6h.01M14 10h.01M14 14h.01M14 18h.01M18 13h.01M18 17h.01" />,
+            MapPin: <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0zM12 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6z" />,
+            Search: <path d="M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.35-4.35" />,
+            Plus: <path d="M12 5v14M5 12h14" />,
+            Trash2: <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6" />,
+            Edit: <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />,
+            ArrowLeft: <path d="M19 12H5M12 19l-7-7 7-7" />,
+            X: <path d="M18 6 6 18M6 6l12 12" />,
+            Check: <path d="M20 6 9 17l-5-5" />,
+            ChevronDown: <path d="M6 9l6 6 6-6" />,
+            ChevronUp: <path d="M18 15l-6-6-6 6" />,
+            TrendingUp: <path d="M23 6l-9.5 9.5-5-5L1 18M17 6h6v6" />,
+            Briefcase: <path d="M20 7h-4V4c0-1.105-.895-2-2-2h-4c-1.105 0-2 .895-2 2v3H4c-1.105 0-2 .895-2 2v11c0 1.105.895 2 2 2h16c1.105 0 2-.895 2-2V9c0-1.105-.895-2-2-2zM10 4h4v3h-4V4zM4 9h16v11H4V9z" />,
+            Activity: <path d="M22 12h-4l-3 9L9 3l-3 9H2" />,
+            Menu: <path d="M4 6h16M4 12h16M4 18h16" />,
+            Download: <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />,
+            FileSpreadsheet: <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2zM14 2v6h6M8 13h2v2H8zm0 4h2v2H8zm4-4h2v2h-2zm0 4h2v2h-2zm4-4h2v2h-2zm0 4h2v2h-2z" />,
+            Printer: <path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z" />,
+            Sparkles: <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />,
+            Send: <path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z" />,
+            Edit3: <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />,
+            UploadCloud: <path d="M16 16l-4-4-4 4M12 12v9M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3M16 16l-4-4-4 4" />,
+            Camera: <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2zM12 13a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />,
+            AlertCircle: <path d="M12 22a10 10 0 1 1 0-20 10 10 0 0 1 0 20zM12 8v4M12 16h.01" />,
+            Command: <path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z" />,
+            Target: <path d="M12 22a10 10 0 1 1 0-20 10 10 0 0 1 0 20zM12 18a6 6 0 1 1 0-12 6 6 0 0 1 0 12zM12 14a2 2 0 1 1 0-4 2 2 0 0 1 0 4z" />,
+            Calendar: <path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 16H5V9h14v11z" />,
+            ArrowUpDown: <path d="m21 16-4 4-4-4M17 20V4M3 8l4-4 4 4M7 4v16"/>
         };
 
-        const MOCK_SALES_REPS = [
-          { id: 's1', name: '홍길동', team: '영업 1팀', department: '영업본부', role: 'manager', email: 'hong@ieg.com', phone: '010-1234-5678' },
-          { id: 's2', name: '김영업', team: '영업 2팀', department: '영업본부', role: 'staff', email: 'kim@ieg.com', phone: '010-2345-6789' },
-          { id: 's3', name: '이수진', team: '영업 1팀', department: '영업본부', role: 'staff', email: 'lee@ieg.com', phone: '010-3456-7890' },
-          { id: 's4', name: '박이사', team: '임원실', department: '영업본부', role: 'director', email: 'park@ieg.com', phone: '010-4567-8901' },
-          { id: 's5', name: '최성실', team: '영업 2팀', department: '영업본부', role: 'staff', email: 'choi@ieg.com', phone: '010-5678-9012' },
-        ];
+        const Icon = ({ name, size = 24, className, style }) => {
+            const path = IconPaths[name];
+            if (!path) return <span style={{fontSize:10}}>?</span>;
+            return (
+                <svg 
+                    xmlns="http://www.w3.org/2000/svg" 
+                    width={size} 
+                    height={size} 
+                    viewBox="0 0 24 24" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    strokeWidth="2" 
+                    strokeLinecap="round" 
+                    strokeLinejoin="round" 
+                    className={className}
+                    style={style}
+                >
+                    {path}
+                </svg>
+            );
+        };
 
-        const now = new Date();
-        const currentYear = now.getFullYear();
-        const getDateInYear = (month, day) => new Date(currentYear, month, day).toISOString().split('T')[0];
+        // ==========================================
+        // 1. DATA CONFIGURATION & TYPES
+        // ==========================================
+        const API_KEY = 'AIzaSyA6fwFuyNGy3Kh6hojdsVZD640tK_QlJNw'; 
+        
+        // !!! IMPORTANT: RESET DATA KEY !!!
+        const STORAGE_KEY = 'ieg_crm_v28_grading_fix';
 
+        // Updated Teams
+        const TEAMS = ['영업1팀', '영업2팀', '영업팀', '마케팅본부', '해외사업팀'];
+        
+        // Updated Types
+        const CONTACT_TYPES = ['고등학교', '대학교', '연구소', '융합원', '테크노파크', '협/단체', '일반 기업'];
+        
         const GRADES = ['S', 'A', 'B', 'C', 'D'];
-        const LOCATIONS = ['서울 강남구', '서울 종로구', '경기 성남시', '대전 유성구', '부산 해운대구', '인천 송도', '충북 청주시', '세종시', '광주 북구'];
-        const BASE_COMPANIES = [
-            '태크코프', '이노베이트', '미래산업', '한국대학교', '서울과학기술대', 'KAIST', 'ETRI', 'KISTI', 
-            '소프트웨어산업협회', '정보통신산업진흥원', '삼성전자', 'LG전자', '현대자동차', 'SK하이닉스', 
-            '네이버', '카카오', '포스코', '한화시스템', 'LIG넥스원', 'KAI', '서울대', '연세대', '고려대',
-            '부산대', '경북대', '전남대', '충남대', '전자통신연구원', '기계연구원', '화학연구원'
+        const LOCATIONS = ['서울 강남', '경기 판교', '대전 대덕', '부산 센텀', '인천 송도', '충북 오송', '세종', '광주 첨단'];
+        
+        const MOCK_SALES_REPS = [
+            { id: 's1', name: '홍길동', team: '영업1팀', department: '영업본부', role: 'manager', email: 'hong@ieg.com', phone: '010-1111-2222' },
+            { id: 's2', name: '김영업', team: '영업2팀', department: '영업본부', role: 'staff', email: 'kim@ieg.com', phone: '010-3333-4444' },
+            { id: 's3', name: '최통합', team: '영업팀', department: '영업본부', role: 'staff', email: 'choi@ieg.com', phone: '010-9999-0000' },
+            { id: 's4', name: '이마케', team: '마케팅본부', department: '마케팅본부', role: 'staff', email: 'lee@ieg.com', phone: '010-5555-6666' },
+            { id: 's5', name: '박해외', team: '해외사업팀', department: '해외사업본부', role: 'director', email: 'park@ieg.com', phone: '010-7777-8888' }
         ];
 
-        // --- Data Generators ---
+        const BASE_NAMES = {
+            '고등학교': ['서울과학고', '경기북과학고', '한국디지털미디어고', '대구소프트웨어마이스터고', '광주소프트웨어마이스터고'],
+            '대학교': ['서울대학교', 'KAIST', 'POSTECH', '연세대학교', '고려대학교', '성균관대학교', '한양대학교'],
+            '연구소': ['ETRI', 'KIST', 'KISTI', '한국기계연구원', '한국화학연구원', '국방과학연구소'],
+            '융합원': ['차세대융합기술연구원', '한국나노기술원', 'AI융합혁신센터', 'SW융합클러스터'],
+            '테크노파크': ['경기테크노파크', '대전테크노파크', '부산테크노파크', '인천테크노파크', '충남테크노파크'],
+            '협/단체': ['한국소프트웨어산업협회', '정보통신산업진흥원', '한국인공지능협회', '한국메타버스산업협회'],
+            '일반 기업': ['삼성전자', 'LG전자', 'SK하이닉스', '네이버', '카카오', '현대자동차']
+        };
+
         const generateContacts = () => {
             const contacts = [];
-            let globalIdx = 0;
-            // Iterate all reps to ensure coverage
-            MOCK_SALES_REPS.forEach((rep) => {
-                const count = 10 + Math.floor(Math.random() * 5); 
-                for (let i = 0; i < count; i++) {
-                    const companyName = BASE_COMPANIES[globalIdx % BASE_COMPANIES.length] + (Math.floor(globalIdx / BASE_COMPANIES.length) > 0 ? ` ${Math.floor(globalIdx / BASE_COMPANIES.length) + 1}` : '');
-                    const type = companyName.includes('대') ? 'University' : (companyName.includes('연구원') || companyName.includes('진흥원') ? 'Institute' : (companyName.includes('협회') ? 'Association' : 'Company'));
+            let idx = 0;
+            MOCK_SALES_REPS.forEach(rep => {
+                const count = 12; 
+                for(let i=0; i<count; i++) {
+                    const type = CONTACT_TYPES[idx % CONTACT_TYPES.length];
+                    const baseNameList = BASE_NAMES[type] || BASE_NAMES['일반 기업'];
+                    const companyName = baseNameList[i % baseNameList.length] + (Math.floor(i/baseNameList.length) > 0 ? ` ${Math.floor(i/baseNameList.length)+1}` : '');
                     
                     contacts.push({
-                        id: `c${globalIdx + 1}`,
-                        name: `담당자${globalIdx + 1}`,
-                        email: `contact${globalIdx + 1}@${type === 'Company' ? 'company.com' : 'org.kr'}`,
-                        phone: `010-${1000 + globalIdx}-${2000 + globalIdx}`,
+                        id: `c${idx}`,
+                        name: `담당자${idx+1}`,
+                        email: `contact${idx+1}@email.com`,
+                        phone: `010-1234-${1000+idx}`,
                         company: companyName,
                         type: type,
-                        address: LOCATIONS[globalIdx % LOCATIONS.length],
-                        role: globalIdx % 3 === 0 ? '팀장' : '책임',
+                        address: LOCATIONS[idx % LOCATIONS.length],
+                        role: '담당',
                         department: rep.team,
-                        lastContacted: getDateInYear(now.getMonth(), (globalIdx % 28) + 1),
-                        notes: [`${currentYear}년 사업 계획 논의 필요`],
-                        grade: GRADES[globalIdx % GRADES.length],
-                        targetAmount: (Math.floor(Math.random() * 50) + 10) * 10000000,
+                        lastContacted: new Date().toISOString().split('T')[0],
+                        notes: [],
+                        grade: GRADES[idx % GRADES.length],
+                        targetAmount: (Math.floor(Math.random() * 50) + 20) * 10000000,
                         owner: rep.name,
-                        team: rep.team
+                        team: rep.team 
                     });
-                    globalIdx++;
+                    idx++;
                 }
             });
             return contacts;
         };
-
         const MOCK_CONTACTS = generateContacts();
 
         const generateDeals = () => {
             const deals = [];
-            let dealIdCounter = 1;
-            MOCK_CONTACTS.forEach(contact => {
-                const dealCount = 3 + Math.floor(Math.random() * 4);
-                for(let i = 0; i < dealCount; i++) {
-                     const month = Math.floor(Math.random() * 12);
-                     const day = Math.floor(Math.random() * 28) + 1;
-                     const status = ['매출', '확정', '예정', '미정'][Math.floor(Math.random() * 4)];
-                     const value = (Math.floor(Math.random() * 20) + 5) * 5000000;
-                     const prodRatio = 0.7 + (Math.random() * 0.2);
-                     const productAmount = Math.round(value * prodRatio);
-                     
-                     let stage = '가망 고객 (Lead)';
-                     let prob = 20;
-                     if(status === '매출') { stage = '계약 성사 (Closed Won)'; prob = 100; }
-                     else if(status === '확정') { stage = '협상 단계 (Negotiation)'; prob = 90; }
-                     else if(status === '예정') { stage = '제안 단계 (Proposal)'; prob = 60; }
-
-                     deals.push({
-                        id: `d${dealIdCounter++}`,
-                        title: `${contact.company} ${month+1}월 납품`,
-                        value: value,
-                        productAmount: productAmount,
-                        goodsAmount: value - productAmount,
-                        itemDetails: `서버 ${Math.floor(Math.random()*5)+1}대`,
-                        status: status,
-                        stage: stage,
-                        contactId: contact.id,
-                        expectedCloseDate: getDateInYear(month, day),
-                        probability: prob,
-                        owner: contact.owner,
-                        team: contact.team,
-                        department: '영업본부'
-                     });
+            let dId = 0;
+            const currentYear = new Date().getFullYear();
+            MOCK_CONTACTS.forEach(c => {
+                for(let m=0; m<12; m++) {
+                    if(Math.random() > 0.4) { 
+                        const status = ['매출', '확정', '예정', '미정'][Math.floor(Math.random()*4)];
+                        const val = (Math.floor(Math.random()*20)+5)*5000000;
+                        const prod = Math.round(val * 0.7);
+                        const goods = val - prod;
+                        const date = new Date(currentYear, m, 15);
+                        deals.push({
+                            id: `d${dId++}`,
+                            title: `${c.company} 기자재 납품 (${m+1}월)`,
+                            value: val,
+                            productAmount: prod,
+                            goodsAmount: goods,
+                            itemDetails: '교육용 장비 및 소프트웨어',
+                            status: status,
+                            stage: status === '매출' ? '계약 성사 (Closed Won)' : '제안 단계 (Proposal)',
+                            contactId: c.id,
+                            expectedCloseDate: date.toISOString().split('T')[0],
+                            probability: 50,
+                            owner: c.owner,
+                            team: c.team,
+                            department: c.department
+                        });
+                    }
                 }
             });
             return deals;
         };
-
         const MOCK_DEALS = generateDeals();
 
         // ==========================================
-        // 2. SERVICES
-        // ==========================================
-        const ai = new GoogleGenAI({ apiKey: API_KEY });
-        const isLocal = !window.google || !window.google.script;
-
-        // --- Gemini AI Functions ---
-        const generateEmailDraft = async (contactName, company, context) => {
-          if (!API_KEY) return "API 키가 필요합니다.";
-          try {
-            const res = await ai.models.generateContent({
-              model: 'gemini-2.5-flash',
-              contents: `작성자: 영업 담당자, 수신자: ${contactName} (${company}), 맥락: ${context}. 정중한 한국어 이메일 초안 작성.`,
-            });
-            return res.text;
-          } catch (e) { return "생성 실패"; }
-        };
-
-        const summarizeMeetingNotes = async (rawNotes) => {
-             if (!API_KEY) return "API 키가 필요합니다.";
-             try {
-                 const res = await ai.models.generateContent({
-                     model: 'gemini-2.5-flash',
-                     contents: `회의 메모 요약 (한국어): "${rawNotes}"`
-                 });
-                 return res.text;
-             } catch(e) { return "요약 실패"; }
-        };
-
-        const assessAccountGrade = async (companyName, type, currentValue, notes) => {
-            if (!API_KEY) return "API 키가 필요합니다.";
-            try {
-                const prompt = `
-                  기업: ${companyName}, 유형: ${type}, 가치: ${currentValue}, 메모: ${notes}.
-                  [지시] Google Search로 최신 현황(재무, 뉴스 등) 조사 후 등급(S/A/B/C/D) 평가.
-                  [출력] 등급: [등급], 분석: [요약]
-                `;
-                const res = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
-                    contents: prompt,
-                    config: { tools: [{ googleSearch: {} }] }
-                });
-                return res.text;
-            } catch(e) { return "분석 실패: " + e.message; }
-        };
-
-        const generateWeeklyReport = async (deals, contacts) => {
-            if (!API_KEY) return "API 키가 필요합니다.";
-            try {
-                 const summary = deals.slice(0, 10).map(d => `${d.status} - ${d.title}`).join('\n');
-                 const prompt = `주간 영업 리포트 (HTML 형식, <h3>,<ul> 사용). 파이프라인: ${summary}`;
-                 const res = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
-                 return res.text;
-            } catch(e) { return "리포트 실패"; }
-        };
-
-        const analyzeDealHealth = async (title, stage, value, notes) => {
-             if (!API_KEY) return "키 확인 필요";
-             try {
-                 const res = await ai.models.generateContent({
-                     model: 'gemini-2.5-flash',
-                     contents: `거래 건전성 분석. ${title}, ${stage}, ${value}. 평가 3줄.`
-                 });
-                 return res.text;
-             } catch(e) { return "분석 실패"; }
-        };
-
-        // --- Storage & GAS Functions ---
-        const loadInitialData = () => {
-          return new Promise((resolve) => {
-            if (isLocal) {
-               const localData = localStorage.getItem(STORAGE_KEY);
-               if (localData) { try { resolve(JSON.parse(localData)); return; } catch(e){} }
-               localStorage.setItem(STORAGE_KEY, JSON.stringify({ contacts: MOCK_CONTACTS, deals: MOCK_DEALS, salesReps: MOCK_SALES_REPS }));
-               resolve({ contacts: MOCK_CONTACTS, deals: MOCK_DEALS, salesReps: MOCK_SALES_REPS });
-               return;
-            }
-            // Google Apps Script Call
-            google.script.run
-              .withSuccessHandler((res) => {
-                  try {
-                      const parsed = JSON.parse(res);
-                      if ((!parsed.contacts || parsed.contacts.length === 0)) {
-                          resolve({ contacts: MOCK_CONTACTS, deals: MOCK_DEALS, salesReps: MOCK_SALES_REPS });
-                      } else {
-                          resolve(parsed);
-                      }
-                  } catch (e) { resolve({ contacts: MOCK_CONTACTS, deals: MOCK_DEALS, salesReps: MOCK_SALES_REPS }); }
-              })
-              .withFailureHandler(() => resolve({ contacts: MOCK_CONTACTS, deals: MOCK_DEALS, salesReps: MOCK_SALES_REPS }))
-              .getCRMData();
-          });
-        };
-
-        const saveDataToSheet = (contacts, deals, salesReps) => {
-            return new Promise((resolve, reject) => {
-                if (isLocal) {
-                    localStorage.setItem(STORAGE_KEY, JSON.stringify({ contacts, deals, salesReps }));
-                    resolve(); return;
-                }
-                google.script.run
-                    .withSuccessHandler(() => {
-                        google.script.run
-                            .withSuccessHandler(() => {
-                                google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).saveCRMData('salesReps', JSON.stringify(salesReps));
-                            }).withFailureHandler(reject).saveCRMData('deals', JSON.stringify(deals));
-                    }).withFailureHandler(reject).saveCRMData('contacts', JSON.stringify(contacts));
-            });
-        };
-
-        const sendReportEmail = (email, subject, body) => {
-            return new Promise((resolve, reject) => {
-                if (isLocal) { console.log("Email Mock Sent"); resolve(); return; }
-                google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).sendEmail(email, subject, body);
-            });
-        };
-
-        const syncSheetData = () => {
-            return loadInitialData();
-        };
-
-        const resetToSampleData = () => {
-            if(isLocal) localStorage.removeItem(STORAGE_KEY);
-            return Promise.resolve();
-        };
-
-        // ==========================================
-        // 3. COMPONENTS
+        // 2. APP LOGIC
         // ==========================================
 
-        const WonIcon = ({ className }) => (
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} width="24" height="24">
-            <path d="M4 4l4 16" /><path d="M20 4l-4 16" /><path d="M8 20l4-10" /><path d="M16 20l-4-10" /><path d="M2 10h20" opacity="0.5"/><path d="M2 14h20" opacity="0.5"/>
-          </svg>
-        );
+        const initApp = () => {
+            const { useState, useEffect, useMemo, useRef } = React;
+            const { createRoot } = ReactDOM;
+            // Use ComposedChart for mixing Bar and Line
+            const { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } = window.Recharts;
+            const ai = new GoogleGenAI({ apiKey: API_KEY });
+            const isLocal = !window.google || !window.google.script;
 
-        // --- DASHBOARD ---
-        const Dashboard = ({ deals, contacts, currentUser, salesReps, onExportToSheet }) => {
-            const [scope, setScope] = useState('individual');
-            const [timePeriod, setTimePeriod] = useState('year');
-            const [selectedUser, setSelectedUser] = useState(currentUser.name);
-            const [selectedTeam, setSelectedTeam] = useState(currentUser.team);
-            const [showExportMenu, setShowExportMenu] = useState(false);
-
-            const teams = useMemo(() => Array.from(new Set(salesReps.map(r => r.team).filter(Boolean))).sort(), [salesReps]);
-
-            useEffect(() => {
-                if (!selectedUser && currentUser.name) setSelectedUser(currentUser.name);
-                if (!selectedTeam && currentUser.team) setSelectedTeam(currentUser.team);
-                if (!selectedTeam && teams.length > 0) setSelectedTeam(teams[0]);
-            }, [currentUser, teams]);
-
-            const filterByScope = (items) => {
-                if (!items) return [];
-                return items.filter(item => {
-                    if (scope === 'individual') return item.owner === selectedUser;
-                    if (scope === 'team') return item.team === selectedTeam;
-                    return true;
-                });
-            };
-
-            const scopedContacts = useMemo(() => filterByScope(contacts), [contacts, scope, selectedUser, selectedTeam]);
-            const scopedDeals = useMemo(() => filterByScope(deals), [deals, scope, selectedUser, selectedTeam]);
-
-            const filteredDeals = useMemo(() => {
-                return scopedDeals.filter(d => {
-                    const date = new Date(d.expectedCloseDate);
-                    const n = new Date();
-                    if (timePeriod === 'year') return date.getFullYear() === n.getFullYear();
-                    if (timePeriod === 'month') return date.getMonth() === n.getMonth() && date.getFullYear() === n.getFullYear();
-                    if (timePeriod === 'quarter') return Math.floor(date.getMonth()/3) === Math.floor(n.getMonth()/3) && date.getFullYear() === n.getFullYear();
-                    return true;
-                });
-            }, [scopedDeals, timePeriod]);
-
-            const targetAmount = useMemo(() => {
-                const total = scopedContacts.reduce((acc, c) => acc + (c.targetAmount || 0), 0);
-                return timePeriod === 'month' ? Math.round(total/12) : (timePeriod === 'quarter' ? Math.round(total/4) : total);
-            }, [scopedContacts, timePeriod]);
-
-            const performanceAmount = filteredDeals.filter(d => d.status === '매출' || d.stage.includes('Won')).reduce((acc, d) => acc + d.value, 0);
-            const confirmedAmount = filteredDeals.filter(d => d.status === '확정').reduce((acc, d) => acc + d.value, 0);
-            const expectedAmount = filteredDeals.filter(d => d.status === '예정').reduce((acc, d) => acc + d.value, 0);
-            const undecidedAmount = filteredDeals.filter(d => d.status === '미정').reduce((acc, d) => acc + d.value, 0);
-
-            const monthlyData = useMemo(() => {
-                const data = Array.from({length: 12}, (_, i) => ({ name: `${i + 1}월`, 매출: 0, 확정: 0, 예정: 0, 미정: 0 }));
-                scopedDeals.forEach(deal => {
-                    const date = new Date(deal.expectedCloseDate);
-                    if (date.getFullYear() === new Date().getFullYear()) {
-                        const m = date.getMonth();
-                        if (data[m]) data[m][deal.status] += deal.value;
+            // --- Services ---
+            const loadInitialData = () => {
+                return new Promise(resolve => {
+                    if(isLocal) {
+                        const saved = localStorage.getItem(STORAGE_KEY);
+                        if (saved) {
+                            try { resolve(JSON.parse(saved)); } 
+                            catch { resolve({ contacts: MOCK_CONTACTS, deals: MOCK_DEALS, salesReps: MOCK_SALES_REPS }); }
+                        } else {
+                            localStorage.setItem(STORAGE_KEY, JSON.stringify({ contacts: MOCK_CONTACTS, deals: MOCK_DEALS, salesReps: MOCK_SALES_REPS }));
+                            resolve({ contacts: MOCK_CONTACTS, deals: MOCK_DEALS, salesReps: MOCK_SALES_REPS });
+                        }
+                    } else {
+                        google.script.run.withSuccessHandler(res => {
+                            try {
+                                const p = JSON.parse(res);
+                                if(!p.contacts || p.contacts.length===0) throw new Error("Empty");
+                                resolve(p);
+                            } catch { resolve({ contacts: MOCK_CONTACTS, deals: MOCK_DEALS, salesReps: MOCK_SALES_REPS }); }
+                        }).getCRMData();
                     }
                 });
-                return data;
-            }, [scopedDeals]);
+            };
 
-            const gradeData = useMemo(() => {
-                const sums = {};
-                scopedContacts.forEach(c => { const g = c.grade || 'D'; sums[g] = (sums[g] || 0) + (c.targetAmount || 0); });
-                return Object.keys(sums).map(k => ({ name: k, value: sums[k] })).sort((a,b) => b.value - a.value);
-            }, [scopedContacts]);
+            const saveData = (contacts, deals, reps) => {
+                return new Promise(resolve => {
+                    if(isLocal) {
+                        localStorage.setItem(STORAGE_KEY, JSON.stringify({contacts, deals, salesReps: reps}));
+                        resolve();
+                    } else {
+                        google.script.run.withSuccessHandler(resolve).saveCRMData('contacts', JSON.stringify(contacts));
+                        google.script.run.saveCRMData('deals', JSON.stringify(deals));
+                        google.script.run.saveCRMData('salesReps', JSON.stringify(reps));
+                    }
+                });
+            };
+            
+            const resetToSampleData = () => {
+                return new Promise((resolve) => {
+                    if(isLocal) localStorage.removeItem(STORAGE_KEY);
+                    resolve();
+                });
+            };
 
-            const formatCurrency = (v) => new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW', maximumFractionDigits: 0 }).format(v);
-            const formatMillions = (v) => `₩${Math.round(v / 1000000).toLocaleString()}백만`;
-            const STACK_COLORS = { '매출': '#10b981', '확정': '#3b82f6', '예정': '#f59e0b', '미정': '#94a3b8' };
-            const GRADE_COLORS = { 'S': '#4f46e5', 'A': '#10b981', 'B': '#f59e0b', 'C': '#f97316', 'D': '#ef4444' };
+            // AI Functions
+            const generateEmailDraft = async (contactName, company, context) => {
+                try {
+                    const prompt = `작성자: 영업 담당자\n수신자: ${contactName} (${company})\n맥락: ${context}\n\n위 내용을 바탕으로 정중하고 전문적인 한국어 이메일 초안을 작성해주세요.`;
+                    const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+                    return response.text;
+                } catch { return "생성 실패"; }
+            };
+            
+            const assessAccountGrade = async (companyName, type, currentValue, notes) => {
+                try {
+                    const prompt = `
+                      기업/기관명: ${companyName}
+                      유형: ${type || '일반 기업'}
+                      현재 파이프라인 가치: ₩${currentValue.toLocaleString()}
+                      내부 영업 메모: ${notes.join(', ')}
 
-            return (
-                <div className="space-y-6 animate-fade-in pb-10 dashboard-container">
-                    <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 no-print">
-                         <div className="flex items-center gap-3">
-                            <h2 className="text-2xl font-bold text-slate-800">영업 대시보드</h2>
-                            <div className="flex items-center bg-white rounded-md border p-0.5">
-                                {['month','quarter','year'].map(p => (
-                                    <button key={p} onClick={()=>setTimePeriod(p)} className={`px-3 py-1.5 text-xs font-medium rounded-sm ${timePeriod===p?'bg-slate-800 text-white':'text-slate-600'}`}>{p==='month'?'월별':p==='quarter'?'분기별':'누계'}</button>
-                                ))}
+                      [지시사항]
+                      1. Google Search를 사용하여 다음 정보를 조사하세요:
+                         - **교육통계서비스(KESS)** 및 대학 알리미 데이터 (교육기관인 경우)
+                         - **타사와의 계약/입찰 이력** (조달청 등)
+                         - 인터넷 뉴스 및 기업 공시 자료 (재무 상태, 예산 이슈)
+                      
+                      2. 위 데이터를 바탕으로 영업 기회와 리스크를 분석하여 S~D 등급을 평가해주세요.
+                      
+                      [등급 기준]
+                      - S: 예산/수주 가능성 매우 높음
+                      - A: 우수 잠재 고객
+                      - B: 일반 관리 대상
+                      - C: 리스크 존재 (예산 삭감 등)
+                      - D: 거래 중단/보류 권장
+                      
+                      [출력 형식]
+                      등급: [등급]
+                      분석: [근거 데이터 및 분석 3줄 요약]
+                      전략: [대응 전략]
+                    `;
+                    const response = await ai.models.generateContent({
+                        model: 'gemini-2.5-flash', contents: prompt,
+                        config: { tools: [{ googleSearch: {} }] }
+                    });
+                    return response.text;
+                } catch { return "분석 실패"; }
+            };
+            
+             const generateWeeklyReport = async (deals, contacts) => {
+                try {
+                    const summary = deals.slice(0, 15).map(d => {
+                        const c = contacts.find(contact => contact.id === d.contactId);
+                        return `- [${d.status}] ${d.title} (${c?.company}, ${c?.grade}등급): ₩${d.value.toLocaleString()}`;
+                    }).join('\n');
+                    
+                    const prompt = `
+                      당신은 영업 팀의 전략가 AI입니다. 주간 영업 리포트를 HTML 형식으로 작성해주세요.
+
+                      [데이터 현황]
+                      ${summary}
+
+                      [필수 포함 항목 및 구조]
+                      1. **전주 대비 변동 현황 (Previous vs Current Week)**
+                         - 매출 변화 (신규 추가, 삭제, 증감)를 '추가', '삭제', '증액/감액' 키워드를 사용하여 명시적으로 보고하세요. (데이터가 없다면 현황 위주로 작성)
+                      
+                      2. **장기 프로젝트 진행 현황 (60일 주기)**
+                         - 입찰 -> 계약 -> 제조 과정이 약 60일 소요됨을 감안하여, 당월 매출이 없더라도 제조 중이거나 입찰 준비 중인 건을 보고하세요.
+                      
+                      3. **금주 필수 방문 제안 (Must-Visit)**
+                         - 파이프라인 상에서 등급이 높으나 진행이 더딘 곳을 '필수 방문 대상'으로 선정하여 리드(Lead)하세요.
+
+                      출력은 <h3>, <ul>, <li> 태그를 사용하여 깔끔하게 정리해주세요. 인사말은 생략합니다.
+                    `;
+                    const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+                    return response.text;
+                } catch { return "리포트 생성 실패"; }
+            };
+            
+            // --- Components ---
+            const WonIcon = ({ className }) => (
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} width="24" height="24">
+                <path d="M4 4l4 16" /><path d="M20 4l-4 16" /><path d="M8 20l4-10" /><path d="M16 20l-4-10" /><path d="M2 10h20" opacity="0.5"/><path d="M2 14h20" opacity="0.5"/>
+              </svg>
+            );
+
+            // 1. Dashboard
+            const Dashboard = ({ deals, contacts, currentUser, salesReps, onExportToSheet }) => {
+                const [scope, setScope] = useState('individual');
+                const [timePeriod, setTimePeriod] = useState('year');
+                const [selectedUser, setSelectedUser] = useState(currentUser.name);
+                const [selectedTeam, setSelectedTeam] = useState(currentUser.team);
+                const [showExportMenu, setShowExportMenu] = useState(false);
+
+                const teams = useMemo(() => Array.from(new Set(salesReps.map(r=>r.team))).sort(), [salesReps]);
+
+                useEffect(() => {
+                    if(currentUser.name && !selectedUser) setSelectedUser(currentUser.name);
+                    if(currentUser.team && !selectedTeam) setSelectedTeam(currentUser.team);
+                    if (!selectedTeam && teams.length > 0) setSelectedTeam(teams[0]);
+                }, [currentUser, teams, selectedUser, selectedTeam]);
+
+                const filterByScope = (items) => {
+                    if (!items) return [];
+                    return items.filter(item => {
+                        if (scope === 'individual') return item.owner === selectedUser;
+                        if (scope === 'team') return item.team === selectedTeam;
+                        return true;
+                    });
+                };
+
+                const scopedContacts = useMemo(() => filterByScope(contacts), [contacts, scope, selectedUser, selectedTeam]);
+                const scopedDeals = useMemo(() => filterByScope(deals), [deals, scope, selectedUser, selectedTeam]);
+                
+                const filteredDeals = useMemo(() => {
+                     const check = (dateStr) => {
+                         const d = new Date(dateStr), n = new Date();
+                         if(timePeriod==='year') return d.getFullYear() === n.getFullYear();
+                         if(timePeriod==='month') return d.getMonth()===n.getMonth() && d.getFullYear()===n.getFullYear();
+                         if(timePeriod==='quarter') {
+                             const q = Math.floor(d.getMonth()/3);
+                             const nq = Math.floor(n.getMonth()/3);
+                             return q === nq && d.getFullYear() === n.getFullYear();
+                         }
+                         return true;
+                     }
+                     return scopedDeals.filter(d => check(d.expectedCloseDate));
+                }, [scopedDeals, timePeriod]);
+
+                const targetAmount = useMemo(() => {
+                     const total = scopedContacts.reduce((acc, c) => acc + (c.targetAmount || 0), 0);
+                     if(timePeriod==='month') return Math.round(total/12);
+                     if(timePeriod==='quarter') return Math.round(total/4);
+                     return total;
+                }, [scopedContacts, timePeriod]);
+                
+                const metrics = {
+                    perf: filteredDeals.filter(d=>d.status==='매출').reduce((a,d)=>a+d.value,0),
+                    conf: filteredDeals.filter(d=>d.status==='확정').reduce((a,d)=>a+d.value,0),
+                    exp: filteredDeals.filter(d=>d.status==='예정').reduce((a,d)=>a+d.value,0),
+                    und: filteredDeals.filter(d=>d.status==='미정').reduce((a,d)=>a+d.value,0)
+                };
+
+                // Monthly/Quarterly Chart Data Logic
+                const chartData = useMemo(() => {
+                    const totalAnnualTarget = scopedContacts.reduce((acc, c) => acc + (c.targetAmount || 0), 0);
+                    const SEASONALITY_WEIGHTS = [0.05, 0.05, 0.08, 0.08, 0.09, 0.09, 0.07, 0.06, 0.10, 0.10, 0.11, 0.12];
+
+                    if (timePeriod === 'quarter') {
+                        // Aggregate for Quarters
+                        const data = [
+                            { name: '1분기', 매출:0, 확정:0, 예정:0, 미정:0, 목표: 0 },
+                            { name: '2분기', 매출:0, 확정:0, 예정:0, 미정:0, 목표: 0 },
+                            { name: '3분기', 매출:0, 확정:0, 예정:0, 미정:0, 목표: 0 },
+                            { name: '4분기', 매출:0, 확정:0, 예정:0, 미정:0, 목표: 0 },
+                        ];
+                        // Q1 Target (Jan+Feb+Mar)
+                        data[0].목표 = Math.round(totalAnnualTarget * (SEASONALITY_WEIGHTS[0]+SEASONALITY_WEIGHTS[1]+SEASONALITY_WEIGHTS[2]));
+                        data[1].목표 = Math.round(totalAnnualTarget * (SEASONALITY_WEIGHTS[3]+SEASONALITY_WEIGHTS[4]+SEASONALITY_WEIGHTS[5]));
+                        data[2].목표 = Math.round(totalAnnualTarget * (SEASONALITY_WEIGHTS[6]+SEASONALITY_WEIGHTS[7]+SEASONALITY_WEIGHTS[8]));
+                        data[3].목표 = Math.round(totalAnnualTarget * (SEASONALITY_WEIGHTS[9]+SEASONALITY_WEIGHTS[10]+SEASONALITY_WEIGHTS[11]));
+
+                        scopedDeals.forEach(d => {
+                            const date = new Date(d.expectedCloseDate);
+                            if(date.getFullYear() === new Date().getFullYear()) {
+                                const q = Math.floor(date.getMonth()/3);
+                                data[q][d.status] += d.value;
+                            }
+                        });
+                        return data;
+                    } else {
+                        // Monthly / Annual view (Show 12 months)
+                        const data = Array.from({length:12}, (_, i) => ({
+                            name: `${i+1}월`, 
+                            매출:0, 
+                            확정:0, 
+                            예정:0, 
+                            미정:0,
+                            목표: Math.round(totalAnnualTarget * SEASONALITY_WEIGHTS[i]) 
+                        }));
+                        
+                        scopedDeals.forEach(d => {
+                            const date = new Date(d.expectedCloseDate);
+                            if(date.getFullYear() === new Date().getFullYear()) {
+                                data[date.getMonth()][d.status] += d.value;
+                            }
+                        });
+                        return data;
+                    }
+                }, [scopedDeals, scopedContacts, timePeriod]);
+
+                const gradeData = useMemo(() => {
+                    const sums = {};
+                    scopedContacts.forEach(c => { 
+                        const g = c.grade || 'D';
+                        sums[g] = (sums[g]||0) + (c.targetAmount || 0); 
+                    });
+                    return Object.entries(sums).map(([k,v]) => ({name:k, value:v})).sort((a,b)=>b.value-a.value);
+                }, [scopedContacts]);
+
+                const formatCurrency = (v) => new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW', maximumFractionDigits: 0 }).format(v);
+                const formatMillions = (v) => `₩${Math.round(v/1000000).toLocaleString()}백만`;
+                
+                const getDynamicFontSize = (val) => {
+                    const str = formatCurrency(val);
+                    if (str.length > 15) return "text-xl";
+                    if (str.length > 11) return "text-2xl";
+                    return "text-3xl"; 
+                };
+                
+                const STACK_COLORS = { '매출': '#10b981', '확정': '#3b82f6', '예정': '#f59e0b', '미정': '#94a3b8' };
+                const GRADE_COLORS = { 'S': '#4f46e5', 'A': '#10b981', 'B': '#f59e0b', 'C': '#f97316', 'D': '#ef4444' };
+
+                const renderOutsideLabel = ({ cx, cy, midAngle, outerRadius, value }) => {
+                    const RADIAN = Math.PI / 180;
+                    const radius = outerRadius + 20; 
+                    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                    return <text x={x} y={y} fill="#334155" textAnchor={x>cx?'start':'end'} dominantBaseline="central" fontSize={13} fontWeight={700}>{formatMillions(value)}</text>;
+                };
+                const renderInsideLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, name }) => {
+                    const RADIAN = Math.PI / 180;
+                    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+                    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                    if (percent < 0.04) return null;
+                    return <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight="bold" style={{textShadow:'0 0 3px #000'}}>{`${name} (${(percent*100).toFixed(1)}%)`}</text>;
+                };
+
+                return (
+                    <div className="space-y-6 pb-12 dashboard-container">
+                        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 no-print">
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                                <h2 className="text-2xl font-bold text-slate-800">영업 대시보드</h2>
+                                <div className="flex items-center bg-white rounded-md border border-slate-200 p-0.5 shadow-sm">
+                                    <button onClick={() => setTimePeriod('month')} className={`px-4 py-2 text-base font-medium rounded-sm transition-colors ${timePeriod === 'month' ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>월별</button>
+                                    <button onClick={() => setTimePeriod('quarter')} className={`px-4 py-2 text-base font-medium rounded-sm transition-colors ${timePeriod === 'quarter' ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>분기별</button>
+                                    <button onClick={() => setTimePeriod('year')} className={`px-4 py-2 text-base font-medium rounded-sm transition-colors ${timePeriod === 'year' ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>누계</button>
+                                </div>
                             </div>
-                         </div>
-                         <div className="flex flex-wrap items-center gap-3">
-                            <div className="relative inline-flex bg-white rounded-lg border p-1">
-                                {['individual','team','all'].map(s => (
-                                    <button key={s} onClick={()=>setScope(s)} className={`px-3 py-1.5 text-sm font-medium rounded-md ${scope===s?'bg-indigo-100 text-indigo-700':'text-slate-600'}`}>{s==='individual'?'개인별':s==='team'?'팀별':'전체'}</button>
-                                ))}
-                            </div>
-                            {scope==='individual' && <select value={selectedUser} onChange={e=>setSelectedUser(e.target.value)} className="pl-3 pr-8 py-2 bg-white border rounded-lg text-sm">{salesReps.map(r=><option key={r.id} value={r.name}>{r.name}</option>)}</select>}
-                            {scope==='team' && <select value={selectedTeam} onChange={e=>setSelectedTeam(e.target.value)} className="pl-3 pr-8 py-2 bg-white border rounded-lg text-sm">{teams.map(t=><option key={t} value={t}>{t}</option>)}</select>}
-                            <div className="relative">
-                                <button onClick={()=>setShowExportMenu(!showExportMenu)} className="flex items-center px-3 py-2 bg-white border rounded-lg text-sm"><Download size={16} className="mr-2"/> 내보내기</button>
-                                {showExportMenu && (
-                                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border z-20 py-1" onClick={()=>setShowExportMenu(false)}>
-                                        <button onClick={onExportToSheet} className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 flex items-center"><FileSpreadsheet size={16} className="mr-2 text-emerald-600"/> Google Sheet</button>
-                                        <button onClick={()=>window.print()} className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 flex items-center"><Printer size={16} className="mr-2 text-slate-500"/> PDF (인쇄)</button>
+                            
+                            <div className="flex flex-wrap items-center gap-3">
+                                <div className="relative inline-flex bg-white rounded-lg border border-slate-200 p-1 shadow-sm">
+                                    {['individual', 'team', 'all'].map(s => (
+                                         <button 
+                                            key={s}
+                                            onClick={() => setScope(s)}
+                                            className={`px-4 py-2 text-base font-medium rounded-md transition-colors ${scope === s ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:text-slate-900'}`}
+                                        >
+                                            {s === 'individual' ? '개인별' : s === 'team' ? '팀별' : '전체'}
+                                        </button>
+                                    ))}
+                                </div>
+                                {scope === 'individual' && (
+                                    <div className="relative min-w-[140px]">
+                                        <select 
+                                            value={selectedUser} 
+                                            onChange={(e) => setSelectedUser(e.target.value)}
+                                            className="w-full pl-3 pr-8 py-2 bg-white border border-slate-200 rounded-lg text-base font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm appearance-none cursor-pointer hover:bg-slate-50"
+                                        >
+                                            {salesReps.map(rep => <option key={rep.id} value={rep.name}>{rep.name}</option>)}
+                                        </select>
+                                        <Icon name="User" className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
                                     </div>
                                 )}
-                            </div>
-                         </div>
-                    </div>
-                    
-                    {/* KPI Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                        <div className="md:col-span-2 lg:col-span-5 bg-white p-4 rounded-xl shadow-sm border flex flex-col md:flex-row justify-between items-center relative overflow-hidden min-h-[105px]">
-                            <div className="z-10">
-                                <p className="text-sm font-bold text-slate-500 flex items-center gap-2">
-                                    총 목표 금액
-                                    <span className="inline-flex items-center px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] rounded-full font-bold border border-indigo-100">{scope==='individual'?selectedUser:scope==='team'?selectedTeam:'전체'}</span>
-                                </p>
-                                <p className="text-3xl font-extrabold text-slate-900">{formatCurrency(targetAmount)}</p>
-                            </div>
-                            <div className="text-right z-10">
-                                <p className="text-sm text-slate-500 font-semibold">달성률</p>
-                                <p className={`text-3xl font-bold ${targetAmount>0 && (performanceAmount/targetAmount)>=1?'text-emerald-600':'text-indigo-600'}`}>{targetAmount>0?((performanceAmount/targetAmount)*100).toFixed(1):0}%</p>
+                                {scope === 'team' && (
+                                    <div className="relative min-w-[140px]">
+                                        <select 
+                                            value={selectedTeam} 
+                                            onChange={(e) => setSelectedTeam(e.target.value)}
+                                            className="w-full pl-3 pr-8 py-2 bg-white border border-slate-200 rounded-lg text-base font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm appearance-none cursor-pointer hover:bg-slate-50"
+                                        >
+                                            {teams.map(teamName => <option key={teamName} value={teamName}>{teamName}</option>)}
+                                        </select>
+                                        <Icon name="Users" className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
+                                    </div>
+                                )}
+                                <div className="relative">
+                                    <button 
+                                        onClick={() => setShowExportMenu(!showExportMenu)} 
+                                        className="flex items-center px-4 py-2 bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 text-base font-medium transition-colors shadow-sm"
+                                    >
+                                        <Icon name="Download" size={18} className="mr-2" /> 내보내기
+                                    </button>
+                                    {showExportMenu && (
+                                        <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-slate-100 z-20 py-1 animate-fade-in">
+                                            <button onClick={()=>{onExportToSheet(); setShowExportMenu(false);}} className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 flex items-center"><Icon name="FileSpreadsheet" size={16} className="mr-2 text-green-600"/> Google Sheet</button>
+                                            <button onClick={()=>{window.print(); setShowExportMenu(false);}} className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 flex items-center"><Icon name="Printer" size={16} className="mr-2 text-slate-500"/> PDF 인쇄</button>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
-                        {[{l:'매출 실적',v:performanceAmount,c:'emerald',i:WonIcon},{l:'매출 확정',v:confirmedAmount,c:'blue',i:Briefcase},{l:'매출 예정',v:expectedAmount,c:'amber',i:TrendingUp},{l:'매출 미정',v:undecidedAmount,c:'slate',i:Users}].map((k,i) => (
-                            <div key={i} className={`bg-white p-4 rounded-xl shadow-sm border-l-4 border-l-${k.c}-500 border-y border-r border-slate-100 flex flex-col justify-between min-h-[105px] relative overflow-hidden group`}>
-                                <div className="z-10"><p className="text-sm font-bold text-slate-500 uppercase">{k.l}</p><p className="text-3xl font-extrabold text-slate-800 mt-2">{formatCurrency(k.v)}</p></div>
-                                <div className={`absolute -bottom-4 -right-4 text-${k.c}-50 opacity-50 group-hover:opacity-100 transform rotate-12`}><k.i size={80} className={`text-${k.c}-200 w-20 h-20`}/></div>
-                            </div>
-                        ))}
-                    </div>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <div className="bg-white p-6 rounded-xl shadow-sm border">
-                            <h3 className="text-lg font-semibold mb-6 flex items-center"><Calendar size={20} className="mr-2 text-indigo-500"/> 월별 매출 현황</h3>
-                            <div className="h-80 w-full">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={monthlyData} margin={{top:20,right:30,left:40,bottom:5}} barCategoryGap="10%">
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false}/>
-                                        <XAxis dataKey="name" axisLine={false} tickLine={false} interval={0}/>
-                                        <YAxis axisLine={false} tickLine={false} tickFormatter={formatMillions}/>
-                                        <Tooltip formatter={formatCurrency}/>
-                                        <Bar dataKey="매출" stackId="a" fill={STACK_COLORS['매출']} maxBarSize={100}/>
-                                        <Bar dataKey="확정" stackId="a" fill={STACK_COLORS['확정']} maxBarSize={100}/>
-                                        <Bar dataKey="예정" stackId="a" fill={STACK_COLORS['예정']} maxBarSize={100}/>
-                                        <Bar dataKey="미정" stackId="a" fill={STACK_COLORS['미정']} radius={[4,4,0,0]} maxBarSize={100}/>
-                                    </BarChart>
-                                </ResponsiveContainer>
+                        {/* Revised Grid Layout: 4 Columns */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            {/* Total Target Card: Spans 4 columns (full width) */}
+                            <div className="col-span-1 md:col-span-2 lg:col-span-4 bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-center gap-6">
+                                <div>
+                                    <p className="text-lg font-bold text-slate-500 mb-2 flex items-center gap-2">총 목표 금액 ({timePeriod==='month'?'월':timePeriod==='quarter'?'분기':'연'})</p>
+                                    <p className={`${getDynamicFontSize(targetAmount)} font-extrabold text-slate-900`}>{formatCurrency(targetAmount)}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-lg font-medium text-slate-500 mb-1">달성률</p>
+                                    <div className="flex items-center gap-4">
+                                        <p className={`text-4xl font-bold ${targetAmount>0 && (metrics.perf/targetAmount)>=1 ? 'text-emerald-600' : 'text-indigo-600'}`}>
+                                            {targetAmount>0?((metrics.perf/targetAmount)*100).toFixed(1):0}%
+                                        </p>
+                                        <div className="w-48 h-4 bg-slate-100 rounded-full overflow-hidden border border-slate-200 hidden md:block">
+                                            <div className={`h-full ${targetAmount>0 && (metrics.perf/targetAmount)>=1 ? 'bg-emerald-500' : 'bg-indigo-500'}`} style={{width: `${Math.min((metrics.perf/(targetAmount||1))*100, 100)}%`}}></div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
+
+                            {/* Metric Cards: Each takes 1 column in lg grid */}
+                            {[
+                                {l:'매출 실적 (완료)', v:metrics.perf, c:'emerald', i:WonIcon},
+                                {l:'매출 확정', v:metrics.conf, c:'blue', i:()=><Icon name="Briefcase" className="w-16 h-16"/>},
+                                {l:'매출 예정', v:metrics.exp, c:'amber', i:()=><Icon name="TrendingUp" className="w-16 h-16"/>},
+                                {l:'매출 미정', v:metrics.und, c:'slate', i:()=><Icon name="Users" className="w-16 h-16"/>}
+                            ].map((k,i) => (
+                                <div key={i} className={`bg-white p-6 rounded-xl shadow-sm border-l-4 border-${k.c}-500 border border-slate-100 relative overflow-hidden flex flex-col justify-between min-h-[140px] group col-span-1`}>
+                                    <div className="z-10 relative">
+                                        <p className="text-base font-bold text-slate-500 uppercase mb-2">{k.l}</p>
+                                        <p className={`${getDynamicFontSize(k.v)} font-extrabold text-slate-800 tracking-tight`}>{formatCurrency(k.v)}</p>
+                                    </div>
+                                    <div className={`absolute -bottom-4 -right-4 text-${k.c}-100 opacity-40 group-hover:opacity-60 transition-opacity rotate-12`}><k.i className="w-20 h-20"/></div>
+                                </div>
+                            ))}
                         </div>
-                        <div className="bg-white p-6 rounded-xl shadow-sm border">
-                            <h3 className="text-lg font-semibold mb-6">거래처 등급 분포</h3>
-                            <div className="h-80 w-full flex justify-center">
-                                {gradeData.length > 0 ? (
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div className="bg-white p-6 rounded-xl shadow-sm border">
+                                <h3 className="text-lg font-bold mb-4 flex items-center"><Icon name="Calendar" size={20} className="mr-2 text-indigo-500"/> 
+                                    {timePeriod === 'quarter' ? '분기별 매출 현황' : '월별 매출 현황 (누적)'}
+                                </h3>
+                                <div className="chart-fix">
+                                    <ResponsiveContainer>
+                                        <ComposedChart data={chartData} barCategoryGap="10%" margin={{top:20,right:30,left:20,bottom:5}}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false}/>
+                                            <XAxis dataKey="name" interval={0} fontSize={12} tick={{fill:'#64748b'}}/>
+                                            <YAxis axisLine={false} tickLine={false} tickFormatter={v=>`${v/1000000}백만`} fontSize={11}/>
+                                            <Tooltip formatter={val => formatCurrency(val)} contentStyle={{borderRadius:'8px'}}/>
+                                            <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} align="center" />
+                                            {['매출','확정','예정','미정'].map(k => <Bar key={k} dataKey={k} stackId="a" fill={STACK_COLORS[k]} maxBarSize={100} radius={[0,0,0,0]}/>)}
+                                            {/* Target Line - SEASONAL */}
+                                            <Line type="monotone" dataKey="목표" stroke="#f97316" strokeWidth={3} strokeDasharray="4 4" dot={{r: 4}} activeDot={{r: 6}} />
+                                        </ComposedChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </div>
+                            <div className="bg-white p-6 rounded-xl shadow-sm border">
+                                <h3 className="text-lg font-bold mb-4">거래처 등급 분포</h3>
+                                <div className="chart-fix">
                                     <ResponsiveContainer>
                                         <PieChart>
-                                            <Pie data={gradeData} cx="50%" cy="50%" innerRadius={50} outerRadius={115} paddingAngle={2} dataKey="value" label={({ cx, cy, midAngle, outerRadius, value }) => {
-                                                const RADIAN = Math.PI / 180; const r = outerRadius + 20; const x = cx + r * Math.cos(-midAngle * RADIAN); const y = cy + r * Math.sin(-midAngle * RADIAN);
-                                                return <text x={x} y={y} fill="#334155" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={13} fontWeight={700}>{formatMillions(value)}</text>;
-                                            }}><Cell/></Pie>
-                                            <Pie data={gradeData} cx="50%" cy="50%" innerRadius={50} outerRadius={115} dataKey="value" label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, name }) => {
-                                                const RADIAN = Math.PI / 180; const r = innerRadius + (outerRadius - innerRadius) * 0.5; const x = cx + r * Math.cos(-midAngle * RADIAN); const y = cy + r * Math.sin(-midAngle * RADIAN);
-                                                if (percent < 0.04) return null;
-                                                return <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight="bold" style={{textShadow: '0px 0px 3px rgba(0,0,0,0.5)'}}>{`${name} (${(percent * 100).toFixed(1)}%)`}</text>;
-                                            }} labelLine={false} fill="none"><Cell/></Pie>
+                                            <Pie data={gradeData} cx="50%" cy="50%" innerRadius={50} outerRadius={115} dataKey="value" paddingAngle={2} label={renderOutsideLabel} labelLine={true}>{gradeData.map((e,i)=><Cell key={i} fill={GRADE_COLORS[e.name]||'#ccc'}/>)}</Pie>
+                                            <Pie data={gradeData} cx="50%" cy="50%" innerRadius={50} outerRadius={115} dataKey="value" label={renderInsideLabel} labelLine={false} fill="none"/>
+                                            <Tooltip formatter={val => formatCurrency(val)}/>
                                         </PieChart>
                                     </ResponsiveContainer>
-                                ) : <div className="text-slate-400 mt-20">데이터가 없습니다.</div>}
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            );
-        };
-
-        // --- CONTACT LIST ---
-        const ContactList = ({ contacts, deals, onSelectContact, onAddContact, onUpdateContact, onDeleteContact }) => {
-            const [term, setTerm] = useState('');
-            const [isOpen, setIsOpen] = useState(false);
-            const [modalMode, setModalMode] = useState('add');
-            const [form, setForm] = useState({});
-            const [includeDeal, setIncludeDeal] = useState(false);
-            const [formDeal, setFormDeal] = useState({});
-            const [showAddr, setShowAddr] = useState(false);
-
-            const filtered = contacts.filter(c => c.name.includes(term) || c.company.includes(term));
-            const openAdd = () => { setModalMode('add'); setForm({department: '영업 1팀', role: '', type: 'Company'}); setIsOpen(true); };
-            const openEdit = (e, c) => { 
-                e.stopPropagation(); 
-                setModalMode('edit'); 
-                setForm({...c}); 
-                const d = deals.find(x=>x.contactId===c.id);
-                if(d) { setIncludeDeal(true); setFormDeal({...d}); } else { setIncludeDeal(false); setFormDeal({}); }
-                setIsOpen(true); 
-            };
-            const submit = (e) => {
-                e.preventDefault();
-                const id = modalMode==='edit' && form.id ? form.id : `c${Date.now()}`;
-                const newContact = { ...form, id, notes: form.notes||[], grade: form.grade||'B', targetAmount: Number(form.targetAmount)||0 };
-                let newDeal;
-                if(includeDeal) {
-                    newDeal = { ...formDeal, id: formDeal.id || `d${Date.now()}`, contactId: id, value: (Number(formDeal.productAmount)||0)+(Number(formDeal.goodsAmount)||0), stage: formDeal.status==='매출'?'계약 성사 (Closed Won)':'제안 단계 (Proposal)' };
-                }
-                if(modalMode==='edit') onUpdateContact(newContact, newDeal);
-                else onAddContact(newContact, newDeal);
-                setIsOpen(false);
+                );
             };
 
-            return (
-                <div className="space-y-6 animate-fade-in relative">
-                    <div className="flex justify-between items-center">
-                        <h2 className="text-2xl font-bold">거래처 및 매출 관리</h2>
-                        <div className="flex gap-2">
-                            <input className="pl-2 p-2 border rounded-lg" placeholder="검색..." value={term} onChange={e=>setTerm(e.target.value)}/>
-                            <button onClick={openAdd} className="px-4 py-2 bg-indigo-600 text-white rounded-lg flex items-center"><Plus size={20} className="mr-1"/> 등록</button>
+            // 2. Contact List
+            const ContactList = ({ contacts, deals, onAdd, onUpdate, onDelete }) => {
+                const [term, setTerm] = useState('');
+                const [isOpen, setIsOpen] = useState(false);
+                const [form, setForm] = useState({});
+                const [includeDeal, setIncludeDeal] = useState(false);
+                const [dealForm, setDealForm] = useState({});
+                const [sortConfig, setSortConfig] = useState(null);
+
+                // Auto-calculate total in deal form
+                useEffect(() => {
+                    if (dealForm) {
+                        setDealForm(prev => ({
+                            ...prev,
+                            value: (Number(prev.productAmount) || 0) + (Number(prev.goodsAmount) || 0)
+                        }));
+                    }
+                }, [dealForm.productAmount, dealForm.goodsAmount]);
+
+                const openAdd = () => {
+                    setForm({ type: CONTACT_TYPES[0], team: TEAMS[0], grade: 'B', targetAmount: 0 });
+                    setDealForm({ status: '미정', value: 0, productAmount:0, goodsAmount:0 });
+                    setIncludeDeal(false);
+                    setIsOpen(true);
+                };
+                const openEdit = (c) => {
+                    setForm(c);
+                    const d = deals.find(x => x.contactId === c.id);
+                    if(d) { 
+                        setIncludeDeal(true); 
+                        setDealForm(d); 
+                    } else { 
+                        setIncludeDeal(false); 
+                        setDealForm({}); 
+                    }
+                    setIsOpen(true);
+                };
+                const save = (e) => {
+                    e.preventDefault();
+                    const id = form.id || `c${Date.now()}`;
+                    const contact = { ...form, id, targetAmount: Number(form.targetAmount) };
+                    const deal = includeDeal ? { 
+                        ...dealForm, 
+                        id: dealForm.id || `d${Date.now()}`, 
+                        contactId: id, 
+                        value: (Number(dealForm.productAmount)||0) + (Number(dealForm.goodsAmount)||0)
+                    } : null;
+                    form.id ? onUpdate(contact, deal) : onAdd(contact, deal);
+                    setIsOpen(false);
+                };
+
+                const handleSort = (key) => {
+                    let direction = 'asc';
+                    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+                        direction = 'desc';
+                    }
+                    setSortConfig({ key, direction });
+                };
+
+                const sortedContacts = useMemo(() => {
+                    const filtered = contacts.filter(c => c.name.includes(term) || c.company.includes(term));
+                    if (!sortConfig) return filtered;
+
+                    return [...filtered].sort((a, b) => {
+                        let aVal, bVal;
+                        
+                        if (sortConfig.key === 'wonTotal') {
+                             const getWon = (cid) => deals.filter(d => d.contactId === cid && (d.status==='매출'||d.status==='확정')).reduce((sum, d) => sum + d.value, 0);
+                             aVal = getWon(a.id);
+                             bVal = getWon(b.id);
+                        } else if (sortConfig.key === 'grade') {
+                             const gradeOrder = { 'S': 5, 'A': 4, 'B': 3, 'C': 2, 'D': 1, 'Unrated': 0 };
+                             aVal = gradeOrder[a.grade] || 0;
+                             bVal = gradeOrder[b.grade] || 0;
+                        } else {
+                             aVal = a[sortConfig.key] || '';
+                             bVal = b[sortConfig.key] || '';
+                        }
+
+                        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+                        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+                        return 0;
+                    });
+                }, [contacts, deals, term, sortConfig]);
+
+                return (
+                    <div className="space-y-4 animate-fade-in">
+                        <div className="flex justify-between">
+                            <div className="relative"><Icon name="Search" className="absolute left-3 top-2.5 text-slate-400" size={18}/><input className="pl-10 pr-4 py-2 border rounded-lg w-64" placeholder="검색..." value={term} onChange={e=>setTerm(e.target.value)}/></div>
+                            <button onClick={openAdd} className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center"><Icon name="Plus" size={18} className="mr-1"/> 등록</button>
                         </div>
-                    </div>
-                    <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-                        <table className="w-full text-left">
-                            <thead className="bg-slate-50 border-b">
-                                <tr><th className="px-4 py-4">거래처/유형/지역</th><th className="px-4 py-4">고객 정보</th><th className="px-4 py-4">매출 현황 (제품/상품/계)</th><th className="px-4 py-4">관리</th></tr>
-                            </thead>
-                            <tbody className="divide-y">
-                                {filtered.map(c => {
-                                    const d = deals.filter(x=>x.contactId===c.id);
-                                    const t = d.reduce((s,x)=>s+x.value,0);
+                        <div className="bg-white rounded-xl shadow-sm border overflow-hidden overflow-x-auto">
+                            <table className="w-full text-left text-sm min-w-[1000px]">
+                                <thead className="bg-slate-50 border-b">
+                                    <tr>
+                                        <th className="px-4 py-3 cursor-pointer hover:bg-slate-100" onClick={()=>handleSort('company')}>
+                                            <div className="flex items-center">거래처/유형/지역 <Icon name="ArrowUpDown" size={14} className="ml-1 text-slate-400"/></div>
+                                        </th>
+                                        <th className="px-4 py-3 cursor-pointer hover:bg-slate-100" onClick={()=>handleSort('name')}>
+                                            <div className="flex items-center">담당자 <Icon name="ArrowUpDown" size={14} className="ml-1 text-slate-400"/></div>
+                                        </th>
+                                        <th className="px-4 py-3 cursor-pointer hover:bg-slate-100" onClick={()=>handleSort('wonTotal')}>
+                                            <div className="flex items-center justify-center">매출 상세 현황 (단위:원) <Icon name="ArrowUpDown" size={14} className="ml-1 text-slate-400"/></div>
+                                        </th>
+                                        <th className="px-4 py-3 text-center cursor-pointer hover:bg-slate-100" onClick={()=>handleSort('grade')}>
+                                             <div className="flex items-center justify-center">등급 <Icon name="ArrowUpDown" size={14} className="ml-1 text-slate-400"/></div>
+                                        </th>
+                                        <th className="px-4 py-3 text-right">관리</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y">{sortedContacts.map(c => {
+                                    // Calculate breakdown for "Sales" + "Confirmed" deals
+                                    const relevantDeals = deals.filter(d => d.contactId === c.id && (d.status==='매출'||d.status==='확정'));
+                                    const wonProduct = relevantDeals.reduce((sum, d) => sum + (d.productAmount || 0), 0);
+                                    const wonGoods = relevantDeals.reduce((sum, d) => sum + (d.goodsAmount || 0), 0);
+                                    const wonTotal = relevantDeals.reduce((sum, d) => sum + d.value, 0);
+                                    
                                     return (
-                                        <tr key={c.id} className="hover:bg-slate-50 cursor-pointer" onClick={()=>onSelectContact(c)}>
-                                            <td className="px-4 py-4">
-                                                <div className="font-medium">{c.company}</div><div className="text-xs bg-slate-100 inline-block px-1 rounded">{c.type}</div>
-                                                <div className="text-xs text-slate-400 mt-1"><MapPin size={10} className="inline"/> {c.address}</div>
+                                        <tr key={c.id} className="hover:bg-slate-50 cursor-pointer" onClick={()=>openEdit(c)}>
+                                            <td className="px-4 py-3"><div className="font-bold">{c.company}</div><span className="text-xs bg-slate-100 px-2 py-0.5 rounded text-slate-500">{c.type}</span><div className="text-xs text-slate-400 mt-1">{c.address}</div></td>
+                                            <td className="px-4 py-3"><div>{c.name}</div><div className="text-xs text-slate-500">{c.owner} ({c.team})</div></td>
+                                            <td className="px-4 py-3">
+                                                <div className="grid grid-cols-3 gap-1 text-xs text-center border rounded overflow-hidden">
+                                                    <div className="bg-slate-50 p-1 font-semibold text-slate-500">제품</div>
+                                                    <div className="bg-slate-50 p-1 font-semibold text-slate-500">상품</div>
+                                                    <div className="bg-slate-100 p-1 font-bold text-slate-700">소계</div>
+                                                    
+                                                    <div className="p-1 border-t text-slate-600">{wonProduct.toLocaleString()}</div>
+                                                    <div className="p-1 border-t text-slate-600">{wonGoods.toLocaleString()}</div>
+                                                    <div className="p-1 border-t font-bold text-emerald-600 bg-emerald-50">{wonTotal.toLocaleString()}</div>
+                                                </div>
                                             </td>
-                                            <td className="px-4 py-4"><div className="font-medium">{c.name}</div><div className="text-xs text-slate-500">{c.email}</div></td>
-                                            <td className="px-4 py-4 text-sm font-medium text-emerald-600">
-                                                {new Intl.NumberFormat('ko-KR',{style:'currency',currency:'KRW'}).format(t)}
-                                            </td>
-                                            <td className="px-4 py-4 text-right">
-                                                <button onClick={(e)=>openEdit(e,c)} className="p-2 text-indigo-600"><Edit size={16}/></button>
-                                                <button onClick={(e)=>{e.stopPropagation(); if(confirm('삭제?')) onDeleteContact(c.id)}} className="p-2 text-red-500"><Trash2 size={16}/></button>
-                                            </td>
+                                            <td className="px-4 py-3 text-center"><span className={`px-2 py-1 rounded text-xs font-bold bg-indigo-100 text-indigo-700`}>{c.grade}</span></td>
+                                            <td className="px-4 py-3 text-right"><button onClick={(e)=>{e.stopPropagation(); onDelete(c.id)}} className="text-slate-400 hover:text-red-500"><Icon name="Trash2" size={16}/></button></td>
                                         </tr>
                                     );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
-                    {isOpen && (
-                         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                            <div className="bg-white p-6 rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-                                <h3 className="text-lg font-bold mb-4">{modalMode==='add'?'등록':'수정'}</h3>
-                                <form onSubmit={submit} className="space-y-3">
-                                    <input required className="w-full p-2 border rounded" placeholder="이름" value={form.name||''} onChange={e=>setForm({...form,name:e.target.value})}/>
-                                    <input required className="w-full p-2 border rounded" placeholder="회사" value={form.company||''} onChange={e=>setForm({...form,company:e.target.value})}/>
-                                    <input className="w-full p-2 border rounded" placeholder="주소 (검색 버튼 생략)" value={form.address||''} onChange={e=>setForm({...form,address:e.target.value})}/>
-                                    <div className="border-t pt-2 mt-2">
-                                        <label className="flex items-center gap-2"><input type="checkbox" checked={includeDeal} onChange={e=>setIncludeDeal(e.target.checked)}/> 매출 정보 포함</label>
-                                        {includeDeal && (
-                                            <div className="mt-2 space-y-2 bg-slate-50 p-2 rounded">
-                                                <input className="w-full p-2 border rounded" placeholder="건명" value={formDeal.title||''} onChange={e=>setFormDeal({...formDeal,title:e.target.value})}/>
-                                                <input type="number" className="w-full p-2 border rounded" placeholder="제품 금액" value={formDeal.productAmount||0} onChange={e=>setFormDeal({...formDeal,productAmount:e.target.value})}/>
+                                })}</tbody>
+                            </table>
+                        </div>
+                        {isOpen && (
+                            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                                <div className="bg-white rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
+                                    <h3 className="font-bold text-lg mb-4">{form.id?'수정':'등록'}</h3>
+                                    <form onSubmit={save} className="space-y-3">
+                                        <input required className="w-full p-2 border rounded" placeholder="이름" value={form.name||''} onChange={e=>setForm({...form,name:e.target.value})}/>
+                                        <input required className="w-full p-2 border rounded" placeholder="회사명" value={form.company||''} onChange={e=>setForm({...form,company:e.target.value})}/>
+                                        
+                                        <div className="grid grid-cols-2 gap-4">
+                                             <div>
+                                                <label className="block text-sm font-medium text-slate-700 mb-1">거래처 유형</label>
+                                                <select className="w-full p-2 border rounded-lg" value={form.type} onChange={e => setForm({...form, type: e.target.value})}>
+                                                    {CONTACT_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
+                                                </select>
                                             </div>
-                                        )}
-                                    </div>
-                                    <button className="w-full py-2 bg-indigo-600 text-white rounded font-bold">저장</button>
-                                    <button type="button" onClick={()=>setIsOpen(false)} className="w-full py-2 text-slate-500">취소</button>
-                                </form>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            );
-        };
-
-        // --- CONTACT DETAIL ---
-        const ContactDetail = ({ contact, deals, onBack }) => {
-            const [gradeRes, setGradeRes] = useState('');
-            const analyze = async () => { setGradeRes('분석 중...'); const r = await assessAccountGrade(contact.company, contact.type, 0, contact.notes.join(',')); setGradeRes(r); };
-            return (
-                <div className="space-y-6 animate-fade-in">
-                    <button onClick={onBack} className="flex items-center text-slate-500 hover:text-indigo-600"><ArrowLeft size={20} className="mr-2"/> 목록</button>
-                    <div className="bg-white p-8 rounded-xl border shadow-sm">
-                        <h1 className="text-2xl font-bold">{contact.name} <span className="text-sm font-normal bg-slate-100 px-2 rounded">{contact.company}</span></h1>
-                        <div className="mt-6 grid grid-cols-2 gap-8">
-                            <div className="p-4 border rounded-lg bg-slate-50">
-                                <h3 className="font-bold text-sm text-slate-500 mb-2">AI 등급 분석</h3>
-                                <button onClick={analyze} className="px-3 py-1 bg-white border text-indigo-600 rounded text-sm mb-2"><Search size={14} className="inline mr-1"/> 실행</button>
-                                <div className="text-sm whitespace-pre-line text-slate-700">{gradeRes}</div>
-                            </div>
-                            <div>
-                                <h3 className="font-bold">진행 중인 거래</h3>
-                                {deals.filter(d=>d.contactId===contact.id).map(d=>(
-                                    <div key={d.id} className="p-3 border rounded bg-slate-50 mt-2">
-                                        <div className="font-semibold">{d.title}</div>
-                                        <div className="text-sm">{d.status} | {new Intl.NumberFormat('ko-KR',{style:'currency',currency:'KRW'}).format(d.value)}</div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            );
-        };
-
-        // --- SETTINGS ---
-        const Settings = ({ salesReps, onAddRep, onUpdateRep, onDeleteRep, onUploadSamples }) => {
-            const [newRep, setNewRep] = useState({ name: '', team: '영업 1팀', department: '영업본부', role: 'staff', email: '', phone: '', profilePicture: '' });
-            const fileRef = useRef(null);
-            const handleFile = (e, isEdit, id) => {
-                const f = e.target.files[0];
-                if(f) {
-                    const r = new FileReader();
-                    r.onloadend = () => {
-                        if(isEdit) { const existing = salesReps.find(x=>x.id===id); if(existing) onUpdateRep({...existing, profilePicture: r.result}); }
-                        else setNewRep(p=>({...p, profilePicture: r.result}));
-                    };
-                    r.readAsDataURL(f);
-                }
-            };
-            return (
-                <div className="space-y-6 max-w-4xl mx-auto animate-fade-in">
-                    <div className="flex justify-between items-center mb-8">
-                        <h2 className="text-2xl font-bold flex items-center"><SettingsIcon className="mr-2"/> 설정</h2>
-                        <div className="flex gap-2">
-                             <button onClick={onUploadSamples} className="flex items-center px-4 py-2 bg-emerald-50 text-emerald-600 rounded-lg"><UploadCloud size={16} className="mr-2"/> 구글 시트 업로드</button>
-                             <button onClick={()=>{if(confirm('초기화?'))resetToSampleData().then(()=>window.location.reload())}} className="flex items-center px-4 py-2 bg-red-50 text-red-600 rounded-lg"><RefreshCw size={16} className="mr-2"/> 초기화</button>
-                        </div>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                        <div className="md:col-span-2 bg-white rounded-xl shadow-sm border overflow-hidden">
-                            <h3 className="bg-slate-50 px-6 py-4 border-b font-semibold">직원 목록</h3>
-                            <ul className="divide-y">
-                                {salesReps.map(r => (
-                                    <li key={r.id} className="px-6 py-4 flex justify-between items-center group">
-                                        <div className="flex items-center gap-4">
-                                            <div className="h-12 w-12 rounded-full bg-slate-200 overflow-hidden relative cursor-pointer group/avatar" onClick={()=>document.getElementById(`file-${r.id}`).click()}>
-                                                {r.profilePicture?<img src={r.profilePicture} className="w-full h-full object-cover"/>:<span className="flex justify-center items-center h-full font-bold">{r.name[0]}</span>}
-                                                <div className="absolute inset-0 bg-black/30 hidden group-hover/avatar:flex items-center justify-center"><Camera size={16} className="text-white"/></div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-slate-700 mb-1">등급 (수동 설정)</label>
+                                                <select 
+                                                    className="w-full p-2 border rounded-lg bg-indigo-50/50 border-indigo-200 text-indigo-700 font-bold" 
+                                                    value={form.grade} 
+                                                    onChange={e => setForm({...form, grade: e.target.value})}
+                                                >
+                                                    {GRADES.map(g => <option key={g} value={g}>{g}등급</option>)}
+                                                </select>
                                             </div>
-                                            <input type="file" id={`file-${r.id}`} className="hidden" onChange={(e)=>handleFile(e,true,r.id)}/>
-                                            <div><p className="font-medium">{r.name} <span className="text-xs bg-slate-100 px-2 rounded">{r.role}</span></p><p className="text-sm text-slate-500">{r.team} | {r.phone}</p></div>
                                         </div>
-                                        <button onClick={()=>confirm('삭제?')&&onDeleteRep(r.id)} className="text-slate-300 hover:text-red-500"><Trash2/></button>
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                        <div className="bg-white rounded-xl shadow-sm border p-6 h-fit">
-                            <h3 className="font-semibold mb-4 flex items-center"><Plus size={18} className="mr-2 text-indigo-600"/> 새 직원 등록</h3>
-                            <div className="space-y-3">
-                                <div className="flex justify-center mb-4 cursor-pointer" onClick={()=>fileRef.current.click()}>
-                                    <div className="h-20 w-20 rounded-full border-2 border-dashed bg-slate-50 flex flex-col items-center justify-center overflow-hidden">
-                                        {newRep.profilePicture?<img src={newRep.profilePicture} className="w-full h-full object-cover"/>:<Camera className="text-slate-400"/>}
-                                    </div>
-                                    <input type="file" ref={fileRef} className="hidden" onChange={(e)=>handleFile(e,false)}/>
+
+                                        <select className="w-full p-2 border rounded" value={form.team} onChange={e=>setForm({...form,team:e.target.value})}>{TEAMS.map(t=><option key={t} value={t}>{t}</option>)}</select>
+                                        <div className="border-t pt-2 mt-2">
+                                            <label className="flex items-center gap-2 mb-2 font-bold text-sm"><input type="checkbox" checked={includeDeal} onChange={e=>setIncludeDeal(e.target.checked)}/> 매출 정보 포함</label>
+                                            {includeDeal && <div className="space-y-2 bg-slate-50 p-3 rounded">
+                                                <input className="w-full p-2 border rounded" placeholder="건명" value={dealForm.title||''} onChange={e=>setDealForm({...dealForm,title:e.target.value})}/>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <div>
+                                                        <label className="text-xs font-bold text-slate-500">제품 매출액</label>
+                                                        <input type="number" className="w-full p-2 border rounded text-right" value={dealForm.productAmount||''} onChange={e=>setDealForm({...dealForm,productAmount:e.target.value})}/>
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-xs font-bold text-slate-500">상품 매출액</label>
+                                                        <input type="number" className="w-full p-2 border rounded text-right" value={dealForm.goodsAmount||''} onChange={e=>setDealForm({...dealForm,goodsAmount:e.target.value})}/>
+                                                    </div>
+                                                </div>
+                                                <div className="text-right font-bold text-indigo-600">
+                                                    합계: {((Number(dealForm.productAmount)||0) + (Number(dealForm.goodsAmount)||0)).toLocaleString()}원
+                                                </div>
+                                                <select className="w-full p-2 border rounded" value={dealForm.status} onChange={e=>setDealForm({...dealForm,status:e.target.value})}>{['미정','예정','확정','매출'].map(s=><option key={s} value={s}>{s}</option>)}</select>
+                                            </div>}
+                                        </div>
+                                        <button className="w-full bg-indigo-600 text-white py-2 rounded-lg mt-4">저장</button>
+                                        <button type="button" onClick={()=>setIsOpen(false)} className="w-full text-slate-500 py-2">취소</button>
+                                    </form>
                                 </div>
-                                <input className="w-full p-2 border rounded" placeholder="이름" value={newRep.name} onChange={e=>setNewRep({...newRep,name:e.target.value})}/>
-                                <input className="w-full p-2 border rounded" placeholder="이메일" value={newRep.email} onChange={e=>setNewRep({...newRep,email:e.target.value})}/>
-                                <input className="w-full p-2 border rounded" placeholder="전화번호" value={newRep.phone} onChange={e=>setNewRep({...newRep,phone:e.target.value})}/>
-                                <select className="w-full p-2 border rounded" value={newRep.team} onChange={e=>setNewRep({...newRep,team:e.target.value})}>
-                                    <option>영업 1팀</option><option>영업 2팀</option>
-                                </select>
-                                <button onClick={()=>{onAddRep({...newRep, id:`s${Date.now()}`}); setNewRep({name:'',team:'영업 1팀',department:'영업본부',role:'staff',email:'',phone:'',profilePicture:''})}} className="w-full py-2 bg-indigo-600 text-white rounded font-medium">추가</button>
                             </div>
+                        )}
+                    </div>
+                );
+            };
+
+            // 3. Settings
+            const Settings = ({ reps, onAdd, onDelete, onUpload }) => {
+                const [form, setForm] = useState({team: TEAMS[0]});
+                const handleReset = async () => { if(confirm("초기화하시겠습니까?")) { await resetToSampleData(); window.location.reload(); } }
+                return (
+                    <div className="space-y-6">
+                        <div className="flex justify-between items-center"><h2 className="text-2xl font-bold">설정</h2><div className="space-x-2"><button onClick={onUpload} className="px-4 py-2 bg-emerald-50 text-emerald-600 rounded border border-emerald-200">샘플 업로드</button><button onClick={handleReset} className="px-4 py-2 bg-red-50 text-red-600 rounded border border-red-200">초기화</button></div></div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                            <div className="md:col-span-2 bg-white rounded-xl border p-4"><h3 className="font-bold mb-4">직원 목록</h3><ul>{reps.map(r=><li key={r.id} className="flex justify-between items-center py-3 border-b last:border-0"><div><span className="font-bold">{r.name}</span><span className="text-sm text-slate-500 ml-2">{r.team}</span></div><button onClick={()=>onDelete(r.id)} className="text-red-400 hover:text-red-600"><Icon name="Trash2" size={16}/></button></li>)}</ul></div>
+                            <div className="bg-white rounded-xl border p-4 h-fit"><h3 className="font-bold mb-4">직원 등록</h3><input className="w-full p-2 border rounded mb-2" placeholder="이름" value={form.name||''} onChange={e=>setForm({...form,name:e.target.value})}/><select className="w-full p-2 border rounded mb-2" value={form.team} onChange={e=>setForm({...form,team:e.target.value})}>{TEAMS.map(t=><option key={t} value={t}>{t}</option>)}</select><button onClick={()=>{onAdd({...form, id:`s${Date.now()}`}); setForm({team:TEAMS[0],name:''})}} className="w-full bg-indigo-600 text-white py-2 rounded">추가</button></div>
                         </div>
                     </div>
-                </div>
-            );
+                );
+            };
+
+            // 4. Main App
+            const App = () => {
+                const [view, setView] = useState('dashboard');
+                const [data, setData] = useState({contacts:[], deals:[], salesReps:[]});
+                const [loading, setLoading] = useState(true);
+                const [currentUser, setCurrentUser] = useState(MOCK_SALES_REPS[0]);
+
+                useEffect(() => { loadInitialData().then(d => { setData(d); if(d.salesReps.length) setCurrentUser(d.salesReps[0]); setLoading(false); }); }, []);
+                const handleSave = async () => { await saveData(data.contacts, data.deals, data.salesReps); alert("저장 완료"); };
+                const updateData = (key, val) => setData(p => ({...p, [key]: val}));
+                if(loading) return <div className="h-screen flex items-center justify-center">Loading...</div>;
+
+                return (
+                    <div className="flex h-screen overflow-hidden">
+                        <aside className="w-64 bg-slate-900 text-white flex flex-col no-print">
+                            <div className="p-6 text-xl font-bold flex items-center gap-2"><Icon name="Command" className="text-blue-500"/><span className="text-blue-600">IEG</span> CRM</div>
+                            <nav className="flex-1 p-4 space-y-2">
+                                <button onClick={()=>setView('dashboard')} className={`w-full text-left px-4 py-3 rounded flex items-center ${view==='dashboard'?'bg-blue-600':'hover:bg-slate-800'}`}><Icon name="LayoutDashboard" size={18} className="mr-3"/> 대시보드</button>
+                                <button onClick={()=>setView('contacts')} className={`w-full text-left px-4 py-3 rounded flex items-center ${view==='contacts'?'bg-blue-600':'hover:bg-slate-800'}`}><Icon name="Users" size={18} className="mr-3"/> 거래처 관리</button>
+                                <button onClick={()=>setView('settings')} className={`w-full text-left px-4 py-3 rounded flex items-center ${view==='settings'?'bg-blue-600':'hover:bg-slate-800'}`}><Icon name="Settings" size={18} className="mr-3"/> 설정</button>
+                            </nav>
+                            <div className="p-4"><button onClick={handleSave} className="w-full py-2 bg-emerald-600 rounded flex items-center justify-center text-sm"><Icon name="Save" size={16} className="mr-2"/> 저장/동기화</button></div>
+                        </aside>
+                        <main className="flex-1 overflow-auto bg-slate-50 p-8">
+                            {view === 'dashboard' && <Dashboard deals={data.deals} contacts={data.contacts} currentUser={currentUser} salesReps={data.salesReps} onExportToSheet={handleSave}/>}
+                            {view === 'contacts' && <ContactList contacts={data.contacts} deals={data.deals} onAdd={(c,d)=>{ updateData('contacts', [...data.contacts, c]); if(d) updateData('deals', [...data.deals, d]); }} onUpdate={(c,d)=>{ updateData('contacts', data.contacts.map(x=>x.id===c.id?c:x)); if(d) updateData('deals', [...data.deals.filter(x=>x.id!==d.id), d]); }} onDelete={id=>updateData('contacts', data.contacts.filter(x=>x.id!==id))} />}
+                            {view === 'settings' && <Settings reps={data.salesReps} onAdd={r=>updateData('salesReps', [...data.salesReps, r])} onDelete={id=>updateData('salesReps', data.salesReps.filter(x=>x.id!==id))} onUpload={handleSave}/>}
+                        </main>
+                    </div>
+                );
+            };
+
+            const root = createRoot(document.getElementById('root'));
+            root.render(<App />);
         };
 
-        // --- MAIN APP ---
-        const App = () => {
-            const [view, setView] = useState('dashboard');
-            const [contacts, setContacts] = useState([]);
-            const [deals, setDeals] = useState([]);
-            const [reps, setReps] = useState([]);
-            const [selContact, setSelContact] = useState(null);
-            const [loading, setLoading] = useState(true);
-            const [user, setUser] = useState(MOCK_SALES_REPS[0]);
-            const [sidebarOpen, setSidebarOpen] = useState(false);
-
-            useEffect(() => {
-                loadInitialData().then(d => {
-                    setContacts(d.contacts); setDeals(d.deals); setReps(d.salesReps);
-                    if(d.salesReps.length) setUser(d.salesReps[0]);
-                    setLoading(false);
-                });
-            }, []);
-
-            const save = () => saveDataToSheet(contacts, deals, reps).then(()=>alert('저장 완료'));
-            const upload = () => saveDataToSheet(contacts, deals, reps).then(()=>alert('업로드 완료'));
-            const sync = () => loadInitialData().then(d=>{ setContacts(d.contacts); setDeals(d.deals); setReps(d.salesReps); alert('동기화 완료'); });
-
-            if(loading) return <div className="h-screen flex items-center justify-center text-indigo-600 font-bold">Loading IEG CRM...</div>;
-
-            return (
-                <div className="flex h-screen bg-slate-50 overflow-hidden">
-                    <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-72 bg-white border-r flex flex-col no-print transition-transform duration-300 ${sidebarOpen?'translate-x-0':'-translate-x-full lg:translate-x-0'}`}>
-                        <div className="p-6 flex items-center justify-between border-b">
-                            <div className="flex items-center gap-2"><Activity className="text-indigo-600"/><span className="text-2xl font-bold"><span className="text-blue-600">IEG</span> CRM</span></div>
-                            <button onClick={()=>setSidebarOpen(false)} className="lg:hidden"><X/></button>
-                        </div>
-                        <nav className="flex-1 px-4 mt-6 space-y-2">
-                            {[{id:'dashboard',l:'대시보드',i:LayoutDashboard},{id:'contacts',l:'거래처 관리',i:Users},{id:'pipeline',l:'파이프라인',i:Kanban},{id:'settings',l:'설정',i:SettingsIcon}].map(m=>(
-                                <button key={m.id} onClick={()=>{setView(m.id);setSelContact(null);setSidebarOpen(false)}} className={`w-full flex items-center px-4 py-3 rounded-xl font-medium ${view===m.id&&!selContact?'bg-indigo-600 text-white':'text-slate-500 hover:bg-slate-100'}`}><m.i className="mr-3" size={20}/>{m.l}</button>
-                            ))}
-                        </nav>
-                        <div className="p-4 grid grid-cols-2 gap-2">
-                            <button onClick={sync} className="py-2 border rounded flex justify-center items-center hover:bg-slate-50"><FileSpreadsheet size={16} className="mr-1"/>불러오기</button>
-                            <button onClick={save} className="py-2 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded flex justify-center items-center"><Save size={16} className="mr-1"/>저장</button>
-                        </div>
-                    </aside>
-                    <main className="flex-1 overflow-auto p-4 lg:p-8 relative">
-                        <header className="lg:hidden flex justify-between items-center mb-4 no-print">
-                            <span className="font-bold text-lg"><span className="text-blue-600">IEG</span> CRM</span>
-                            <button onClick={()=>setSidebarOpen(true)}><Menu/></button>
-                        </header>
-                        {selContact ? <ContactDetail contact={selContact} deals={deals} onBack={()=>setSelContact(null)}/> : (
-                         view === 'dashboard' ? <Dashboard deals={deals} contacts={contacts} currentUser={user} salesReps={reps} onExportToSheet={save}/> :
-                         view === 'contacts' ? <ContactList contacts={contacts} deals={deals} onSelectContact={setSelContact} onAddContact={(c,d)=>{setContacts([...contacts,c]); if(d) setDeals([...deals,d])}} onUpdateContact={(c,d)=>{setContacts(contacts.map(x=>x.id===c.id?c:x)); if(d) setDeals([...deals,d])}} onDeleteContact={id=>{setContacts(contacts.filter(c=>c.id!==id))}}/> :
-                         view === 'settings' ? <Settings salesReps={reps} onAddRep={r=>setReps([...reps,r])} onDeleteRep={id=>setReps(reps.filter(r=>r.id!==id))} onUpdateRep={r=>setReps(reps.map(x=>x.id===r.id?r:x))} onUploadSamples={upload}/> :
-                         <div className="p-4">파이프라인 화면</div> 
-                        )}
-                    </main>
-                </div>
-            );
-        };
-
-        const root = createRoot(document.getElementById('root'));
-        root.render(<App />);
+        // Initialize when libraries are ready (Recharts is safe now)
+        let attempts = 0;
+        const checkLibs = () => {
+            if (window.React && window.ReactDOM && window.Recharts) initApp();
+            else if (attempts++ < 50) setTimeout(checkLibs, 50);
+            else console.error("Libraries failed");
+        }
+        checkLibs();
     </script>
 </body>
 </html>

@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Deal, DealStage, Contact, ScopeType, TimePeriod, SalesRep } from '../types';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts';
 import { Briefcase, Users, TrendingUp, Download, Calendar, User, Users as UsersIcon, Activity, FileSpreadsheet, Printer } from 'lucide-react';
 
 interface DashboardProps {
@@ -469,6 +469,7 @@ const Dashboard: React.FC<DashboardProps> = ({ deals, contacts, currentUser, sal
                     cursor={{fill: '#f8fafc', opacity: 0.8}}
                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                   />
+                  <Legend iconType="circle" />
                   <Bar dataKey="매출" stackId="a" fill={STACK_COLORS['매출']} radius={[0, 0, 0, 0]} maxBarSize={100} />
                   <Bar dataKey="확정" stackId="a" fill={STACK_COLORS['확정']} radius={[0, 0, 0, 0]} maxBarSize={100} />
                   <Bar dataKey="예정" stackId="a" fill={STACK_COLORS['예정']} radius={[0, 0, 0, 0]} maxBarSize={100} />
@@ -539,3 +540,4 @@ const Dashboard: React.FC<DashboardProps> = ({ deals, contacts, currentUser, sal
 };
 
 export default Dashboard;
+    
